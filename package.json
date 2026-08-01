@@ -4,10 +4,7 @@
   "description": "Discord Rich Presence plugin for OpenCode",
   "type": "module",
   "license": "MIT",
-  "author": {
-    "name": "butterbrodskiy",
-    "email": "daimyoryu@gmail.com"
-  },
+  "author": "butterbrodskiy",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/butterbrodskiy/opencode-rpc.git"
