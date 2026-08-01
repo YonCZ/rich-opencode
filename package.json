@@ -1,8 +1,32 @@
 {
   "name": "opencode-rpc",
-  "version": "1.1.1",
+  "version": "1.2.0",
+  "description": "Discord Rich Presence plugin for OpenCode",
   "type": "module",
   "license": "MIT",
+  "author": {
+    "name": "butterbrodskiy",
+    "email": "daimyoryu@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/butterbrodskiy/opencode-rpc.git"
+  },
+  "homepage": "https://github.com/butterbrodskiy/opencode-rpc#readme",
+  "bugs": {
+    "url": "https://github.com/butterbrodskiy/opencode-rpc/issues"
+  },
+  "keywords": [
+    "opencode",
+    "discord",
+    "rich-presence",
+    "discord-rpc",
+    "rpc",
+    "plugin"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -21,6 +45,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "prepack": "npm run build",
     "postinstall": "node scripts/postinstall.mjs"
   },
   "dependencies": {

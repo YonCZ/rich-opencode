@@ -1,4 +1,6 @@
-import { existsSync, appendFileSync } from "node:fs";
+import { existsSync, appendFileSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@xhayper/discord-rpc";
 import type { Plugin, Config } from "@opencode-ai/plugin";
 import type { Event, AssistantMessage, Session } from "@opencode-ai/sdk";
@@ -13,7 +15,38 @@ interface DiscordRPOptions {
   providerIcons?: Record<string, string>;
 }
 
-const OPENCODE_LOGO = "https://opencode.ai/_build/assets/opencode-desktop-icon-OSkS5hfD.png";
+const OPENCODE_LOGO = "https://opencode.ai/favicon-96x96-v3.png";
+const debugLogDir = join(homedir(), ".local", "share", "opencode");
+const debugLogPath = join(debugLogDir, "opencode-rpc-debug.log");
+const MAX_DEBUG_LOG_BYTES = 5 * 1024 * 1024;
+const STALE_LOG_MS = 7 * 24 * 60 * 60 * 1000; // rotated logs older than this are deleted
+
+function debugLog(data: Record<string, unknown>) {
+  if (!process.env.OPENCODE_RPC_DEBUG) return;
+  try {
+    if (existsSync(debugLogPath) && statSync(debugLogPath).size > MAX_DEBUG_LOG_BYTES) {
+      renameSync(debugLogPath, `${debugLogPath}.old`);
+    }
+    appendFileSync(debugLogPath, JSON.stringify({ time: Date.now(), ...data }) + "\n");
+  } catch {
+    // ignore
+  }
+}
+
+function purgeStaleDebugLogs() {
+  try {
+    const cutoff = Date.now() - STALE_LOG_MS;
+    for (const name of readdirSync(debugLogDir)) {
+      if (!name.startsWith("opencode-rpc-debug.log")) continue;
+      const stalePath = join(debugLogDir, name);
+      if (statSync(stalePath).mtimeMs < cutoff) unlinkSync(stalePath);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+purgeStaleDebugLogs();
 
 function buildModelsDevIconUrl(providerID: string): string {
   return `https://images.weserv.nl/?url=https://models.dev/logos/${providerID}.svg&output=png&bg=white&w=256&h=256`;
@@ -159,9 +192,7 @@ const discordRPPlugin: Plugin = async (input, rawOptions) => {
     const showCost = options.showCost !== false;
     const rootID = getRootSessionID(currentSessionID);
     const { tokensInput, tokensOutput, cost } = getFamilyTotals(rootID);
-    try {
-      appendFileSync("C:\\Users\\butter\\.local\\share\\opencode\\opencode-rpc-debug.log", JSON.stringify({ time: Date.now(), type: "buildState", currentSessionID, rootID, totals: { tokensInput, tokensOutput, cost }, sessionTotalsKeys: Array.from(sessionTotals.keys()), sessionParentsKeys: Array.from(sessionParents.entries()) }) + "\n");
-    } catch { /* ignore */ }
+    debugLog({ type: "buildState", currentSessionID, rootID, totals: { tokensInput, tokensOutput, cost }, sessionTotalsKeys: Array.from(sessionTotals.keys()), sessionParentsKeys: Array.from(sessionParents.entries()) });
 
     const parts: string[] = [];
     if (showTokens) {
@@ -257,12 +288,6 @@ const discordRPPlugin: Plugin = async (input, rawOptions) => {
 
     event: async ({ event }: { event: Event }) => {
       if (!client) initDiscord();
-
-      const debugLog = (data: any) => {
-        try {
-          appendFileSync("C:\\Users\\butter\\.local\\share\\opencode\\opencode-rpc-debug.log", JSON.stringify({ time: Date.now(), ...data }) + "\n");
-        } catch { /* ignore */ }
-      };
 
       if (event.type === "session.created") {
         const info = (event as any).properties.info as Session;
