@@ -29,6 +29,14 @@ if you choose to not run `bun pm trust opencode-rpc` (it just adds the plugin to
 }
 ```
 
+## update
+
+opencode has a terrible caching system for npm plugins, so you'll need to force a refresh if the plugin has been updated:
+
+```bash
+opencode plugin opencode-rpc@latest --global --force
+```
+
 ## configuration
 
 ```json

@@ -15,7 +15,7 @@ interface DiscordRPOptions {
   providerIcons?: Record<string, string>;
 }
 
-const OPENCODE_LOGO = "https://opencode.ai/favicon-96x96-v3.png";
+const OPENCODE_ASSET_KEY = "logo";
 const debugLogDir = join(homedir(), ".local", "share", "opencode");
 const debugLogPath = join(debugLogDir, "opencode-rpc-debug.log");
 const MAX_DEBUG_LOG_BYTES = 5 * 1024 * 1024;
@@ -219,7 +219,7 @@ const discordRPPlugin: Plugin = async (input, rawOptions) => {
       details: buildDetails(),
       state: buildState(),
       startTimestamp: pluginStartTime,
-      largeImageKey: OPENCODE_LOGO,
+            largeImageKey: OPENCODE_ASSET_KEY,
       largeImageText: "OpenCode",
       smallImageKey: smallImage,
       smallImageText: smallText,
