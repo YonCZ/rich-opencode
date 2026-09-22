@@ -1,7 +1,6 @@
 {
   "name": "opencode-rpc",
-  "version": "1.2.4",
-  "description": "Discord Rich Presence plugin for OpenCode",
+  "version": "2.0.0",
   "type": "module",
   "license": "MIT",
   "author": "butterbrodskiy",
@@ -15,10 +14,11 @@
   },
   "keywords": [
     "opencode",
+    "opencode-plugin",
     "discord",
-    "rich-presence",
     "discord-rpc",
-    "rpc",
+    "rich-presence",
+    "presence",
     "plugin"
   ],
   "engines": {
@@ -28,34 +28,51 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./server": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
+  "oc-plugin": [
+    "server"
+  ],
   "files": [
     "dist",
     "scripts"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "prepack": "npm run build",
     "postinstall": "node scripts/postinstall.mjs"
   },
   "dependencies": {
-    "@xhayper/discord-rpc": "^1.3.1",
-    "opencode-rpc": "^1.2.3"
+    "@xhayper/discord-rpc": "^1.3.1"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.4.8",
-    "@opencode-ai/sdk": "^1.4.8",
+    "@opencode-ai/plugin": "^1.18.32",
+    "@opencode-ai/sdk": "^1.18.32",
+    "@opencode/plugin": "^2.0.14",
     "@types/node": "^25.8.0",
     "typescript": "^5.8.0"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": ">=1.0.0"
+    "@opencode-ai/plugin": ">=1.18.29",
+    "@opencode/plugin": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@opencode-ai/plugin": {
+      "optional": true
+    },
+    "@opencode/plugin": {
+      "optional": true
+    }
   }
 }

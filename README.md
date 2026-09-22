@@ -1,6 +1,6 @@
 # opencode-rpc
 
-Discord Rich Presence for [OpenCode](https://opencode.ai).
+Discord Rich Presence for [OpenCode](https://opencode.ai). works on both opencode 1.x.x and 2.x.x.
 
 <p align="center">
   <img width="458" height="163" src="https://github.com/user-attachments/assets/222a7434-38b3-44ca-9292-abde7b7863c5" />
@@ -8,20 +8,27 @@ Discord Rich Presence for [OpenCode](https://opencode.ai).
 
 ## install
 
+### OpenCode 2.x.x
+
 ```bash
-bun pm trust opencode-rpc
-bun add opencode-rpc
+opencode plugin add opencode-rpc
 ```
-or
+
+or add it to the `plugins` array in `opencode.json`:
+
+```jsonc
+{
+  "plugins": ["opencode-rpc"]
+}
+```
+
+### OpenCode 1.x.x
+
 ```bash
 npm install opencode-rpc
 ```
-or
-```bash
-pnpm add opencode-rpc
-```
 
-if you choose to not run `bun pm trust opencode-rpc` (it just adds the plugin to opencode.json, that's it) or if for some reason auto-add to opencode.json didn't work, you can add the plugin to opencode.json by yourself:
+the install script adds the plugin to your OpenCode config. set `SKIP_OPENCODE_AUTO_CONFIG=1` to skip that and register it yourself:
 
 ```json
 {
@@ -44,25 +51,52 @@ opencode plugin opencode-rpc@latest --global --force
   "plugin": ["opencode-rpc"],
   "plugin_config": {
     "opencode-rpc": {
-      "clientId": "1234567...", // your own discord application client id (default: built-in)
-      "showProject": true, // set to false to hide the project name
-      "showTokens": true, // set to false to hide input/output token stats
-      "showCost": true, // set to false to hide cost stats
-      "customText": "deep into vibecoding in", // custom prefix instead of "Working on"
-      "hideProjectText": "your mom", // custom text instead of project name when hidden
-      "providerIcons": { // override or add custom provider icons
-        "openai": "https://example.com/my-icon.png",
-        "user-added-provider": "https://example.com/my-icon-2.png"
-      }
+      "clientId": "1234567890",
+      "showProject": true,
+      "showTokens": true,
+      "showCost": true
+      ...
     }
   }
 }
 ```
 
-also, if you create a `.hiderpc` file in your project, it will force `showProject = false` for that specific project.
+### options
+
+| option | default | meaning |
+| --- | --- | --- |
+| `clientId` | built-in | Your own Discord application client ID |
+| `showProject` | `true` | Show the project folder name |
+| `showTokens` | `true` | Show input/output token counts |
+| `showCost` | `true` | Show session cost |
+| `customText` | `Working on` | Text before the project name |
+| `hideProjectText` | `something...` | Text used when the project name is hidden |
+| `providerIcons` | `{}` | Override or add provider icons, keyed by provider ID |
+
+Put a `.hiderpc` file in a project to force `showProject = false` for that project only.
+
+### debugging
+
+set `OPENCODE_RPC_DEBUG=1` to append state changes to `~/.local/share/opencode/opencode-rpc-debug.log`.
+
+## updating
+
+```bash
+opencode plugin update opencode-rpc
+```
+
+opencode caches plugin packages, so a plain reinstall may keep serving the old build. clear the cached copy and restart if a new version does not appear:
+
+linux/macOS:
+```bash
+rm -rf "$HOME/.cache/opencode/npm/opencode-rpc@latest"
+```
+windows (PowerShell):
+```powershell
+Remove-Item -Recurse -Force "$HOME\.cache\opencode\npm\opencode-rpc@latest"
+```
 
 ## built-in provider icons
-
 
 | provider ID(s) | |
 |---|---|
@@ -111,8 +145,9 @@ also, if you create a `.hiderpc` file in your project, it will force `showProjec
 | `frogbot` | <img src="https://www.google.com/s2/favicons?domain=frogbot.ai&sz=32" width="24" /> |
 | `opencode-go`, `opencode-zen` | uses the OpenCode app icon |
 
-any unrecognized provider falls back to the OpenCode icon unless specified in providerIcons.
+any other provider falls back to the OpenCode icon, or to whatever you set in `providerIcons`.
 
-## uhhh
+## uhh
 
 everything was vibecoded with opencode go's kimi k2.6 :) but if it works it works
+upd: v2 port was vibecoded with opencode go's deepseek v4.1 flash! how the time flies
