@@ -303,6 +303,11 @@ export class Presence {
   private buildDetails(): string {
     if (!this.currentSessionID) return "OpenCode";
     if (!this.projectDir) return "OpenCode";
+    return this.model?.modelID ?? "OpenCode";
+  }
+
+  private buildState(): string | undefined {
+    if (!this.currentSessionID) return STATUS_LABELS[this.status];
 
     const rootID = this.rootOf(this.currentSessionID);
     const { tokensInput, tokensOutput, cost } = this.familyTotals(rootID);
@@ -317,11 +322,7 @@ export class Presence {
     if (this.options.showCost === true && cost > 0) {
       parts.push(`$${cost.toFixed(2)}`);
     }
-    if (this.model?.modelID) parts.push(this.model.modelID);
-    return parts.length > 0 ? parts.join(" \u00b7 ") : "OpenCode";
-  }
-
-  private buildState(): string | undefined {
-    return STATUS_LABELS[this.status];
+    parts.push(STATUS_LABELS[this.status]);
+    return parts.join(" \u00b7 ");
   }
 }
