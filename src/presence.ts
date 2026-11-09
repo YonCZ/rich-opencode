@@ -34,7 +34,8 @@ const debugDir = join(homedir(), ".local", "share", "opencode");
 const debugPath = join(debugDir, "opencode-rpc-debug.log");
 
 export function debugLog(data: Record<string, unknown>): void {
-  if (!process.env.OPENCODE_RPC_DEBUG) return;
+  // Fork: always log (rotated at 5 MB) so presence problems are diagnosable.
+  // Stock upstream gates this behind OPENCODE_RPC_DEBUG.
   try {
     if (existsSync(debugPath) && statSync(debugPath).size > MAX_DEBUG_LOG_BYTES) {
       renameSync(debugPath, `${debugPath}.old`);
@@ -93,6 +94,8 @@ export class Presence {
   private client: Client | null = null;
   private ready = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryDelay = 2_000;
 
   private readonly sessions = new Set<string>();
   private readonly parents = new Map<string, string | undefined>();
@@ -119,23 +122,57 @@ export class Presence {
       this.client = client;
       client.on("ready", () => {
         this.ready = true;
+        this.retryDelay = 2_000;
+        debugLog({ type: "rpc.ready", user: this.client?.user?.username });
         // Every location gets its own plugin instance; stay silent until this
         // instance has real session data so a fresh instance can't clobber the
         // presence that the active session is showing.
         if (this.currentSessionID) this.flush();
       });
-      void client.login().catch(() => {
+      client.on("disconnected", () => {
+        debugLog({ type: "rpc.disconnected" });
+        this.ready = false;
         this.client = null;
+        this.scheduleRetry();
       });
-    } catch {
+      void client.login().catch((error) => {
+        // The Discord handshake has a 10s timeout and the OpenCode server can be
+        // busy while plugins load, so retry with backoff instead of giving up.
+        debugLog({ type: "rpc.login.failed", error: String(error), retryInMs: this.retryDelay });
+        try {
+          void client.destroy();
+        } catch {
+          // ignore
+        }
+        this.client = null;
+        this.ready = false;
+        this.scheduleRetry();
+      });
+    } catch (error) {
+      debugLog({ type: "rpc.client.failed", error: String(error) });
       this.client = null;
+      this.scheduleRetry();
     }
+  }
+
+  private scheduleRetry(): void {
+    if (this.retryTimer) return;
+    const delay = this.retryDelay;
+    this.retryDelay = Math.min(Math.round(this.retryDelay * 1.5), 15_000);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.start();
+    }, delay);
   }
 
   dispose(): void {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
+    }
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
     }
     try {
       void this.client?.destroy();

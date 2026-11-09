@@ -1,5 +1,9 @@
 import type { Plugin } from "@opencode/plugin";
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { Presence, debugLog, type DiscordRpcOptions } from "./presence.js";
 
 export const pluginId = "opencode-rpc";
@@ -10,6 +14,33 @@ const PROMPTING_IDLE_MS = 60_000;
 const STALL_MS = 3 * 60_000;
 /** How often we sample macOS system idle time and re-derive the status. */
 const STATUS_POLL_MS = 5_000;
+
+/**
+ * The server loads one plugin instance per location, but Discord only needs one
+ * connection. Whichever instance wins this lock owns the RPC client.
+ */
+const LOCK_PATH = join(homedir(), ".local", "share", "opencode", "opencode-rpc.lock");
+const LOCK_STALE_MS = 15_000;
+
+/** Apps that can host the opencode TUI (or its integrated terminal). */
+const FRONTMOST_TERMINALS = new Set([
+  "Terminal",
+  "iTerm2",
+  "iTerm",
+  "Ghostty",
+  "Warp",
+  "Alacritty",
+  "kitty",
+  "WezTerm",
+  "Hyper",
+  "Tabby",
+  "Rio",
+  "Code",
+  "Cursor",
+  "Zed",
+  "Windsurf",
+  "opencode",
+]);
 
 /**
  * Seconds since the last keyboard/mouse input anywhere on the machine.
@@ -27,49 +58,151 @@ function readSystemIdleMs(): Promise<number | null> {
   });
 }
 
+/** Display name of the frontmost macOS app, e.g. "Terminal". */
+function readFrontmostApp(): Promise<string | null> {
+  if (process.platform !== "darwin") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    execFile("/usr/bin/lsappinfo", ["front"], { timeout: 2000 }, (error, stdout) => {
+      if (error) return resolve(null);
+      const asn = stdout.trim();
+      if (!asn) return resolve(null);
+      execFile("/usr/bin/lsappinfo", ["info", "-only", "name", asn], (err, out) => {
+        if (err) return resolve(null);
+        const match = /"LSDisplayName"\s*=\s*"([^"]+)"/.exec(out);
+        resolve(match?.[1] ?? null);
+      });
+    });
+  });
+}
+
+type LockFile = { id?: string; pid?: number; heartbeat?: number };
+
+const instanceId = randomUUID();
+
+function readLock(): LockFile | null {
+  try {
+    return JSON.parse(readFileSync(LOCK_PATH, "utf8")) as LockFile;
+  } catch {
+    return null;
+  }
+}
+
+function pidAlive(pid: number | undefined): boolean {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function tryAcquireLock(): boolean {
+  const now = Date.now();
+  const existing = readLock();
+  const stale =
+    !existing ||
+    !existing.heartbeat ||
+    now - existing.heartbeat > LOCK_STALE_MS ||
+    !pidAlive(existing.pid);
+
+  if (!stale) return false;
+
+  try {
+    writeFileSync(LOCK_PATH, JSON.stringify({ id: instanceId, pid: process.pid, heartbeat: now }));
+  } catch {
+    return false;
+  }
+  return readLock()?.id === instanceId;
+}
+
+function heartbeatLock(): void {
+  try {
+    writeFileSync(LOCK_PATH, JSON.stringify({ id: instanceId, pid: process.pid, heartbeat: Date.now() }));
+  } catch {
+    // ignore
+  }
+}
+
+function releaseLock(): void {
+  if (readLock()?.id !== instanceId) return;
+  try {
+    unlinkSync(LOCK_PATH);
+  } catch {
+    // ignore
+  }
+}
+
 export function createV2Plugin() {
   return {
     id: pluginId,
     async setup(ctx: Plugin.Context) {
       const presence = new Presence((ctx.options ?? {}) as DiscordRpcOptions, ctx.location?.directory ?? "");
-      presence.start();
-
       const controller = new AbortController();
 
       const executing = new Set<string>();
       const reasoning = new Set<string>();
+      const inspected = new Set<string>();
       let systemIdleMs: number | null = null;
+      let frontmostApp: string | null = null;
       let lastSessionEvent = Date.now();
+      let leader = false;
 
       const derive = () => {
         if (reasoning.size > 0) {
           presence.setStatus("thinking");
         } else if (executing.size > 0) {
           presence.setStatus("working");
-        } else if (systemIdleMs !== null && systemIdleMs < PROMPTING_IDLE_MS) {
+        } else if (
+          systemIdleMs !== null &&
+          systemIdleMs < PROMPTING_IDLE_MS &&
+          frontmostApp !== null &&
+          FRONTMOST_TERMINALS.has(frontmostApp)
+        ) {
           presence.setStatus("prompting");
         } else {
           presence.setStatus("idle");
         }
       };
 
-      const poll = setInterval(() => {
-        void readSystemIdleMs().then((idle) => {
-          systemIdleMs = idle;
-          if (executing.size > 0 && Date.now() - lastSessionEvent > STALL_MS) {
-            executing.clear();
-            reasoning.clear();
-          }
-          derive();
-        });
-      }, STATUS_POLL_MS);
+      const ensureLeader = () => {
+        if (leader) {
+          heartbeatLock();
+          return;
+        }
+        if (!tryAcquireLock()) return;
+        leader = true;
+        debugLog({ type: "leader.acquired" });
+        presence.start();
+      };
 
-      void readSystemIdleMs().then((idle) => {
-        systemIdleMs = idle;
+      const refresh = async () => {
+        ensureLeader();
+        systemIdleMs = await readSystemIdleMs();
+        frontmostApp =
+          systemIdleMs !== null && systemIdleMs < PROMPTING_IDLE_MS ? await readFrontmostApp() : null;
+        if (executing.size > 0 && Date.now() - lastSessionEvent > STALL_MS) {
+          executing.clear();
+          reasoning.clear();
+        }
         derive();
-      });
+        if (leader) {
+          debugLog({
+            type: "refresh",
+            systemIdleMs,
+            frontmostApp,
+            executing: executing.size,
+            reasoning: reasoning.size,
+          });
+        }
+      };
+
+      const poll = setInterval(() => void refresh(), STATUS_POLL_MS);
+      void refresh();
 
       async function inspect(sessionID: string): Promise<void> {
+        if (inspected.has(sessionID)) return;
+        inspected.add(sessionID);
         try {
           const info = await ctx.session.get({ sessionID });
           if (!info) return;
@@ -77,7 +210,7 @@ export function createV2Plugin() {
           if (info.location?.directory) presence.setProjectDir(info.location.directory);
           if (info.model) presence.setModel({ providerID: info.model.providerID, modelID: info.model.id });
         } catch {
-          // session may not be readable yet
+          inspected.delete(sessionID);
         }
       }
 
@@ -124,6 +257,9 @@ export function createV2Plugin() {
                   tokensOutput: data.tokens.output + data.tokens.reasoning,
                   cost: data.cost,
                 });
+                // A session that existed before the plugin loaded never emitted
+                // session.created here, so fetch its model on first usage.
+                void inspect(data.sessionID);
                 break;
               }
 
@@ -176,6 +312,7 @@ export function createV2Plugin() {
         clearInterval(poll);
         controller.abort();
         presence.dispose();
+        if (leader) releaseLock();
       };
     },
   };

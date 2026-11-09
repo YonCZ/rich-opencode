@@ -6,11 +6,15 @@ Discord Rich Presence for [OpenCode](https://opencode.ai). works on both opencod
 > - details line shows model + token usage (`↓ 16.3k | ↑ 500 · qwen3.8-27b`)
 > - state line shows `Thinking`, `Working`, `Prompting`, or `Idle`
 > - `Thinking` = model reasoning events; `Working` = tool calls, text streaming, execution
-> - `Prompting` = no agent activity and recent keyboard/mouse input (macOS `ioreg` HID idle < 60s — OpenCode does not broadcast prompt typing, so this is the closest proxy)
-> - `Idle` = nothing running and no recent input
+> - `Prompting` = no agent activity, keyboard/mouse input within 60s, **and** a supported terminal/editor app is frontmost (OpenCode does not broadcast prompt typing; this is the closest proxy)
+> - `Idle` = nothing running, no recent input, or the terminal is not frontmost
 > - only the opencode logo is shown (no provider icon), no elapsed timer, cost off by default
+> - one leader instance owns the Discord connection (file lock at `~/.local/share/opencode/opencode-rpc.lock`); the others stay dormant
+> - connection retries with backoff instead of dying on the 10s handshake timeout
+> - every flush/status is appended to `~/.local/share/opencode/opencode-rpc-debug.log` for diagnosis
 >
-> Run `npm run preview [status]` to flash a sample card in Discord for a few seconds.
+> Run `npm run preview [status]` to flash a sample card in Discord for a few seconds,
+> or `npm run diagnose` to open a single raw RPC connection for 10 minutes.
 
 <p align="center">
   <img width="458" height="163" src="https://github.com/user-attachments/assets/222a7434-38b3-44ca-9292-abde7b7863c5" />

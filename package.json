@@ -51,7 +51,8 @@
     "typecheck": "tsc --noEmit",
     "prepack": "npm run build",
     "postinstall": "node scripts/postinstall.mjs",
-    "preview": "node preview.mjs"
+    "preview": "node preview.mjs",
+    "diagnose": "node diagnose.mjs"
   },
   "dependencies": {
     "@xhayper/discord-rpc": "^1.3.1"
