@@ -2,6 +2,14 @@
 
 Discord Rich Presence for [OpenCode](https://opencode.ai). works on both opencode 1.x.x and 2.x.x.
 
+> **This is a local fork ("RichOpencode").** Changes vs. stock:
+> - details line shows a random sarcastic app name instead of your project folder (`Working on Best App for sure`)
+> - small provider icon removed — only the opencode logo is shown
+> - model id appended after the token counts (`↓ 16.3k | ↑ 500 · qwen3.8-27b`)
+> - cost hidden by default (set `plugin_config.opencode-rpc.showCost: true` to bring it back)
+>
+> Tweak the `SARCASTIC_APPS` list in [`src/presence.ts`](src/presence.ts), then run `npm run build` — the running OpenCode service hot-reloads the new build. `npm run preview` flashes a sample card in Discord for a few seconds.
+
 <p align="center">
   <img width="458" height="163" src="https://github.com/user-attachments/assets/222a7434-38b3-44ca-9292-abde7b7863c5" />
 </p>

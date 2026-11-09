@@ -60,19 +60,27 @@ function purgeStaleDebugLogs(): void {
 
 purgeStaleDebugLogs();
 
-function modelsDevIconUrl(providerID: string): string {
-  return `https://images.weserv.nl/?url=https://models.dev/logos/${providerID}.svg&output=png&bg=white&w=256&h=256`;
+// Instead of broadcasting the real project folder name, pick a sarcastic app
+// name and keep it stable for the whole session. Edit this list to taste.
+const SARCASTIC_APPS = [
+  "Best App for sure",
+  "definitely not broken",
+  "shipping, obviously",
+  "it's not a bug, it's a feature",
+  "v1, final",
+  "this time it compiles",
+  "almost done, promise",
+  "the last rewrite",
+];
+
+function randomSarcasticApp(): string {
+  return SARCASTIC_APPS[Math.floor(Math.random() * SARCASTIC_APPS.length)] ?? "something";
 }
 
 function formatTokens(count: number): string {
   if (count >= 1_000_000) return (count / 1_000_000).toFixed(2) + "M";
   if (count >= 1_000) return (count / 1_000).toFixed(1) + "k";
   return String(count);
-}
-
-function lastPathSegment(directory: string): string {
-  const parts = directory.split(/[\\/]/).filter((part) => part.length > 0);
-  return parts[parts.length - 1] ?? "";
 }
 
 // OmniRoute forwards "<provider>/<model>" inside its own model IDs.
@@ -102,6 +110,8 @@ export class Presence {
   private currentSessionID: string | null = null;
   private model: ModelRef | null = null;
   private projectDir: string;
+  private sarcasticSessionID: string | null = null;
+  private sarcasticApp = "";
 
   constructor(options: DiscordRpcOptions, directory: string) {
     this.options = options;
@@ -214,19 +224,13 @@ export class Presence {
 
     client.user
       ?.setActivity({
-        details: this.buildDetails(),
-        state: this.buildState(),
+        details,
+        state,
         startTimestamp: this.startedAt,
         largeImageKey: OPENCODE_ASSET_KEY,
         largeImageText: "OpenCode",
-        smallImageKey: this.model ? this.iconFor(this.model.providerID) : undefined,
-        smallImageText: this.model ? `${this.model.providerID}/${this.model.modelID}` : undefined,
       })
       ?.catch?.(() => {});
-  }
-
-  private iconFor(providerID: string): string {
-    return this.options.providerIcons?.[providerID] || modelsDevIconUrl(providerID);
   }
 
   private isDescendantOf(sessionID: string, ancestorID: string): boolean {
@@ -260,15 +264,20 @@ export class Presence {
     return totals;
   }
 
+  private sarcasticAppFor(sessionID: string): string {
+    if (this.sarcasticSessionID !== sessionID) {
+      this.sarcasticSessionID = sessionID;
+      this.sarcasticApp = randomSarcasticApp();
+    }
+    return this.sarcasticApp;
+  }
+
   private buildDetails(): string {
     if (!this.currentSessionID) return "At the main screen...";
     if (!this.projectDir) return "At the main screen...";
 
-    const hidden = existsSync(join(this.projectDir, ".hiderpc"));
-    const showProject = !hidden && this.options.showProject !== false;
     const prefix = this.options.customText || "Working on";
-    const suffix = showProject ? lastPathSegment(this.projectDir) : this.options.hideProjectText || "something...";
-    return `${prefix} ${suffix}`.trim();
+    return `${prefix} ${this.sarcasticAppFor(this.currentSessionID)}`.trim();
   }
 
   private buildState(): string | undefined {
@@ -284,9 +293,10 @@ export class Presence {
       if (tokensOutput > 0) tokens.push(`\u2191 ${formatTokens(tokensOutput)}`);
       if (tokens.length > 0) parts.push(tokens.join(" | "));
     }
-    if (this.options.showCost !== false && cost > 0) {
+    if (this.options.showCost === true && cost > 0) {
       parts.push(`$${cost.toFixed(2)}`);
     }
-    return parts.length > 0 ? parts.join(" / ") : "";
+    if (this.model?.modelID) parts.push(this.model.modelID);
+    return parts.length > 0 ? parts.join(" \u00b7 ") : "";
   }
 }
