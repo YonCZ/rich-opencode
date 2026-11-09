@@ -100,6 +100,9 @@ export class Presence {
   private readonly sessions = new Set<string>();
   private readonly parents = new Map<string, string | undefined>();
   private readonly usage = new Map<string, SessionUsage>();
+  private readonly created = new Map<string, number>();
+  private readonly contextUsage = new Map<string, { input: number; output: number }>();
+  private readonly pluginStartedAt = Date.now();
 
   private currentSessionID: string | null = null;
   private model: ModelRef | null = null;
@@ -204,6 +207,8 @@ export class Presence {
   }
 
   setCurrentSession(sessionID: string, directory?: string): void {
+    // Sub-agent sessions share the card with their parent; never let them own it.
+    if (this.parents.get(sessionID)) return;
     if (!this.sessions.has(sessionID)) this.rememberSession(sessionID);
     this.currentSessionID = sessionID;
     if (directory) this.projectDir = directory;
@@ -223,6 +228,18 @@ export class Presence {
     if (this.status === status) return;
     this.status = status;
     debugLog({ type: "status", status });
+    this.queue();
+  }
+
+  rememberCreated(sessionID: string, createdAt: number): void {
+    if (createdAt > 0) this.created.set(sessionID, createdAt);
+  }
+
+  /** Context usage of the latest model call, matching OpenCode's sidebar number. */
+  setContextUsage(sessionID: string, input: number, output: number): void {
+    const previous = this.contextUsage.get(sessionID);
+    if (previous && previous.input === input && previous.output === output) return;
+    this.contextUsage.set(sessionID, { input, output });
     this.queue();
   }
 
@@ -254,7 +271,9 @@ export class Presence {
   flush(): void {
     const details = this.buildDetails();
     const state = this.buildState();
-    debugLog({ type: "flush", details, state, connected: Boolean(this.client?.isConnected) });
+    const startedAt = this.currentSessionID ? this.created.get(this.currentSessionID) : undefined;
+    const startTimestamp = Math.floor((startedAt ?? this.pluginStartedAt) / 1000);
+    debugLog({ type: "flush", details, state, startTimestamp, connected: Boolean(this.client?.isConnected) });
 
     const client = this.client;
     if (!client || !client.isConnected) return;
@@ -263,6 +282,7 @@ export class Presence {
       ?.setActivity({
         details,
         state,
+        startTimestamp,
         largeImageKey: OPENCODE_ASSET_KEY,
         largeImageText: "OpenCode",
       })
@@ -309,18 +329,18 @@ export class Presence {
   private buildState(): string | undefined {
     if (!this.currentSessionID) return STATUS_LABELS[this.status];
 
-    const rootID = this.rootOf(this.currentSessionID);
-    const { tokensInput, tokensOutput, cost } = this.familyTotals(rootID);
+    const usage = this.contextUsage.get(this.currentSessionID);
 
     const parts: string[] = [];
-    if (this.options.showTokens !== false) {
+    if (this.options.showTokens !== false && usage) {
       const tokens: string[] = [];
-      if (tokensInput > 0) tokens.push(`\u2193 ${formatTokens(tokensInput)}`);
-      if (tokensOutput > 0) tokens.push(`\u2191 ${formatTokens(tokensOutput)}`);
+      if (usage.input > 0) tokens.push(`\u2193 ${formatTokens(usage.input)}`);
+      if (usage.output > 0) tokens.push(`\u2191 ${formatTokens(usage.output)}`);
       if (tokens.length > 0) parts.push(tokens.join(" | "));
     }
-    if (this.options.showCost === true && cost > 0) {
-      parts.push(`$${cost.toFixed(2)}`);
+    if (this.options.showCost === true) {
+      const { cost } = this.familyTotals(this.rootOf(this.currentSessionID));
+      if (cost > 0) parts.push(`$${cost.toFixed(2)}`);
     }
     parts.push(STATUS_LABELS[this.status]);
     return parts.join(" \u00b7 ");

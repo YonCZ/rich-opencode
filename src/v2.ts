@@ -146,6 +146,7 @@ export function createV2Plugin() {
       let systemIdleMs: number | null = null;
       let frontmostApp: string | null = null;
       let lastSessionEvent = Date.now();
+      let activeSessionID: string | null = null;
       let leader = false;
 
       const derive = () => {
@@ -174,6 +175,9 @@ export function createV2Plugin() {
         leader = true;
         debugLog({ type: "leader.acquired" });
         presence.start();
+        // Re-seed the visible session (model, context tokens, start time).
+        inspected.clear();
+        if (activeSessionID) void inspect(activeSessionID);
       };
 
       const refresh = async () => {
@@ -200,6 +204,27 @@ export function createV2Plugin() {
       const poll = setInterval(() => void refresh(), STATUS_POLL_MS);
       void refresh();
 
+      async function seedContext(sessionID: string): Promise<void> {
+        try {
+          const messages = await ctx.session.context({ sessionID });
+          for (let index = messages.length - 1; index >= 0; index--) {
+            const message = messages[index];
+            if (!message || message.type !== "assistant" || !message.tokens) continue;
+            presence.setContextUsage(
+              sessionID,
+              message.tokens.input + message.tokens.cache.read + message.tokens.cache.write,
+              message.tokens.output + message.tokens.reasoning,
+            );
+            if (message.model) {
+              presence.setModel({ providerID: message.model.providerID, modelID: message.model.id });
+            }
+            break;
+          }
+        } catch {
+          // best effort only
+        }
+      }
+
       async function inspect(sessionID: string): Promise<void> {
         if (inspected.has(sessionID)) return;
         inspected.add(sessionID);
@@ -209,6 +234,8 @@ export function createV2Plugin() {
           presence.rememberSession(info.id, info.parentID);
           if (info.location?.directory) presence.setProjectDir(info.location.directory);
           if (info.model) presence.setModel({ providerID: info.model.providerID, modelID: info.model.id });
+          if (info.time?.created) presence.rememberCreated(info.id, info.time.created);
+          if (leader) void seedContext(info.id);
         } catch {
           inspected.delete(sessionID);
         }
@@ -222,10 +249,11 @@ export function createV2Plugin() {
                 const data = event.data;
                 debugLog({ type: "session.created", sessionID: data.sessionID, parentID: data.parentID });
                 presence.rememberSession(data.sessionID, data.parentID);
-                presence.setCurrentSession(data.sessionID, data.location?.directory);
                 if (data.model) {
                   presence.setModel({ providerID: data.model.providerID, modelID: data.model.id });
                 }
+                // Do not steal the card for a freshly opened empty session.
+                void inspect(data.sessionID);
                 break;
               }
 
@@ -238,6 +266,7 @@ export function createV2Plugin() {
               }
 
               case "session.viewed": {
+                activeSessionID = event.data.sessionID;
                 presence.setCurrentSession(event.data.sessionID);
                 void inspect(event.data.sessionID);
                 break;
@@ -251,6 +280,7 @@ export function createV2Plugin() {
 
               case "session.usage.updated": {
                 const data = event.data;
+                activeSessionID = data.sessionID;
                 presence.setCurrentSession(data.sessionID);
                 presence.setUsage(data.sessionID, {
                   tokensInput: data.tokens.input,
@@ -296,6 +326,17 @@ export function createV2Plugin() {
               case "session.tool.called":
               case "session.tool.progress": {
                 executing.add(event.data.sessionID);
+                lastSessionEvent = Date.now();
+                break;
+              }
+
+              case "session.step.ended": {
+                const data = event.data;
+                presence.setContextUsage(
+                  data.sessionID,
+                  data.tokens.input + data.tokens.cache.read + data.tokens.cache.write,
+                  data.tokens.output + data.tokens.reasoning,
+                );
                 lastSessionEvent = Date.now();
                 break;
               }

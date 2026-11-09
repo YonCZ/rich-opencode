@@ -3,7 +3,10 @@
 Discord Rich Presence for [OpenCode](https://opencode.ai). works on both opencode 1.x.x and 2.x.x.
 
 > **This is a local fork ("RichOpencode").** Changes vs. stock:
-> - details line shows the model (`deepseek-v4.1-flash`); the state line shows tokens + status (`↓ 16.3k | ↑ 500 · Working`)
+> - details line shows the model (`deepseek-v4.1-flash`); the state line shows context tokens + status (`↓ 16.3k | ↑ 500 · Working`)
+> - tokens are the **latest model call's context usage** (input+cache / output+reasoning), matching OpenCode's sidebar "Context" number — not cumulative session totals
+> - the elapsed timer runs from the session's creation time and keeps counting while idle
+> - the card follows the most recently active **root** session; freshly opened empty sessions and sub-agent sessions never take it over
 > - state line cycles between `Thinking`, `Working`, `Prompting`, and `Idle`
 > - `Thinking` = model reasoning events; `Working` = tool calls, text streaming, execution
 > - `Prompting` = no agent activity, keyboard/mouse input within 60s, **and** a supported terminal/editor app is frontmost (OpenCode does not broadcast prompt typing; this is the closest proxy)
