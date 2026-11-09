@@ -60,22 +60,14 @@ function purgeStaleDebugLogs(): void {
 
 purgeStaleDebugLogs();
 
-// Instead of broadcasting the real project folder name, pick a sarcastic app
-// name and keep it stable for the whole session. Edit this list to taste.
-const SARCASTIC_APPS = [
-  "Best App for sure",
-  "definitely not broken",
-  "shipping, obviously",
-  "it's not a bug, it's a feature",
-  "v1, final",
-  "this time it compiles",
-  "almost done, promise",
-  "the last rewrite",
-];
+export type PresenceStatus = "thinking" | "working" | "prompting" | "idle";
 
-function randomSarcasticApp(): string {
-  return SARCASTIC_APPS[Math.floor(Math.random() * SARCASTIC_APPS.length)] ?? "something";
-}
+const STATUS_LABELS: Record<PresenceStatus, string> = {
+  thinking: "Thinking",
+  working: "Working",
+  prompting: "Prompting",
+  idle: "Idle",
+};
 
 function formatTokens(count: number): string {
   if (count >= 1_000_000) return (count / 1_000_000).toFixed(2) + "M";
@@ -101,7 +93,6 @@ export class Presence {
   private client: Client | null = null;
   private ready = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private readonly startedAt = Date.now();
 
   private readonly sessions = new Set<string>();
   private readonly parents = new Map<string, string | undefined>();
@@ -110,8 +101,7 @@ export class Presence {
   private currentSessionID: string | null = null;
   private model: ModelRef | null = null;
   private projectDir: string;
-  private sarcasticSessionID: string | null = null;
-  private sarcasticApp = "";
+  private status: PresenceStatus = "idle";
 
   constructor(options: DiscordRpcOptions, directory: string) {
     this.options = options;
@@ -129,7 +119,10 @@ export class Presence {
       this.client = client;
       client.on("ready", () => {
         this.ready = true;
-        this.flush();
+        // Every location gets its own plugin instance; stay silent until this
+        // instance has real session data so a fresh instance can't clobber the
+        // presence that the active session is showing.
+        if (this.currentSessionID) this.flush();
       });
       void client.login().catch(() => {
         this.client = null;
@@ -189,6 +182,13 @@ export class Presence {
     if (directory) this.projectDir = directory;
   }
 
+  setStatus(status: PresenceStatus): void {
+    if (this.status === status) return;
+    this.status = status;
+    debugLog({ type: "status", status });
+    this.queue();
+  }
+
   /** Adds the delta reported for a single message (OpenCode 1). */
   addUsage(sessionID: string, delta: SessionUsage): void {
     const current = this.usage.get(sessionID) ?? { tokensInput: 0, tokensOutput: 0, cost: 0 };
@@ -226,7 +226,6 @@ export class Presence {
       ?.setActivity({
         details,
         state,
-        startTimestamp: this.startedAt,
         largeImageKey: OPENCODE_ASSET_KEY,
         largeImageText: "OpenCode",
       })
@@ -264,24 +263,9 @@ export class Presence {
     return totals;
   }
 
-  private sarcasticAppFor(sessionID: string): string {
-    if (this.sarcasticSessionID !== sessionID) {
-      this.sarcasticSessionID = sessionID;
-      this.sarcasticApp = randomSarcasticApp();
-    }
-    return this.sarcasticApp;
-  }
-
   private buildDetails(): string {
-    if (!this.currentSessionID) return "At the main screen...";
-    if (!this.projectDir) return "At the main screen...";
-
-    const prefix = this.options.customText || "Working on";
-    return `${prefix} ${this.sarcasticAppFor(this.currentSessionID)}`.trim();
-  }
-
-  private buildState(): string | undefined {
-    if (!this.currentSessionID) return undefined;
+    if (!this.currentSessionID) return "OpenCode";
+    if (!this.projectDir) return "OpenCode";
 
     const rootID = this.rootOf(this.currentSessionID);
     const { tokensInput, tokensOutput, cost } = this.familyTotals(rootID);
@@ -297,6 +281,10 @@ export class Presence {
       parts.push(`$${cost.toFixed(2)}`);
     }
     if (this.model?.modelID) parts.push(this.model.modelID);
-    return parts.length > 0 ? parts.join(" \u00b7 ") : "";
+    return parts.length > 0 ? parts.join(" \u00b7 ") : "OpenCode";
+  }
+
+  private buildState(): string | undefined {
+    return STATUS_LABELS[this.status];
   }
 }
