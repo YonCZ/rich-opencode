@@ -1,6 +1,6 @@
 {
   "name": "rich-opencode",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Highly configurable Discord Rich Presence plugin for OpenCode — your model, context usage, activity status and a play-session timer, arranged how you want.",
   "type": "module",
   "license": "MIT",
@@ -35,10 +35,15 @@
     "./server": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./tui": {
+      "types": "./dist/tui.d.ts",
+      "import": "./dist/tui.js"
     }
   },
   "oc-plugin": [
-    "server"
+    "server",
+    "tui"
   ],
   "files": [
     "dist",

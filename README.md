@@ -13,6 +13,7 @@ deepseek-v4.1-flash
 
 ## Features
 
+- **Follows your open chat** — a tiny TUI part reports which chat is open, so the card shows that chat's model and tokens instead of whatever ran last
 - **Fully configurable layout** — choose which fields go on line 1 and line 2, in any order, with any separator
 - **Fields**: model, token usage, cost, activity status, project name, agent, and custom literal text
 - **Two token modes** — `context` (latest model call, matches OpenCode's sidebar "Context" number) or `cumulative` (session totals)
@@ -56,6 +57,8 @@ Then register it in `~/.config/opencode/opencode.json` (or a project `opencode.j
 ```
 
 Save the config (OpenCode hot-reloads) or run `opencode service restart`.
+
+> Restart your OpenCode TUI once after installing. The plugin ships a tiny TUI part that reports the open chat; it only loads when the TUI starts.
 
 > The `options` block below is optional — every setting has a default.
 
@@ -173,6 +176,16 @@ Rich Opencode runs as an OpenCode server plugin and subscribes to the V2 event s
 | `Idle` | nothing running and no recent input |
 
 Token numbers come from `session.step.ended` — the latest model call — so the card matches the "Context" number in OpenCode's sidebar instead of inflating to the whole session's cumulative usage.
+
+### Which chat is shown
+
+OpenCode's server does not broadcast focus changes, so the plugin's TUI part writes the currently open chat to `~/.local/share/opencode/rich-opencode-focus.json` (on route change). The server follows that file, which means:
+
+- switching chats/tabs updates the card immediately
+- a background chat that runs or finishes **does not** take over the card
+- switching between separate terminal windows without changing the chat is not detectable (open the chat or send a prompt and it updates)
+
+If the TUI part is unavailable (e.g. an older TUI), the plugin falls back to activity-based switching.
 
 The elapsed timer starts with the first activity and keeps counting through idle. A continuous idle stretch of `timer.idleResetMinutes` starts a new play session, so an old session opened days later doesn't show a 100+ hour timer.
 

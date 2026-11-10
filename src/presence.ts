@@ -109,7 +109,7 @@ export class Presence {
   private idleSince: number | null = null;
 
   private currentSessionID: string | null = null;
-  private model: ModelRef | null = null;
+  private readonly models = new Map<string, ModelRef>();
   private projectDir: string;
   private status: PresenceStatus = "idle";
 
@@ -198,6 +198,13 @@ export class Presence {
     return this.sessions.has(sessionID);
   }
 
+  /** True when the session is the card's session or one of its sub-agents. */
+  belongsToCurrentSession(sessionID: string): boolean {
+    if (!this.currentSessionID) return true;
+    const root = this.rootOf(this.currentSessionID);
+    return sessionID === root || this.isDescendantOf(sessionID, root);
+  }
+
   forgetSession(sessionID: string): void {
     this.sessions.delete(sessionID);
     this.parents.delete(sessionID);
@@ -221,9 +228,18 @@ export class Presence {
     this.queue();
   }
 
-  setModel(ref: ModelRef | null): void {
-    this.model = ref ? normalizeModel(ref) : null;
+  setModel(sessionID: string, ref: ModelRef | null): void {
+    if (!ref) {
+      this.models.delete(sessionID);
+      this.queue();
+      return;
+    }
+    this.models.set(sessionID, normalizeModel(ref));
     this.queue();
+  }
+
+  currentModel(): ModelRef | null {
+    return this.currentSessionID ? (this.models.get(this.currentSessionID) ?? null) : null;
   }
 
   setProjectDir(directory: string): void {
@@ -300,7 +316,8 @@ export class Presence {
     const client = this.client;
     if (!client || !client.isConnected) return;
 
-    const icon = this.options.smallImage.enabled && this.model ? this.iconFor(this.model.providerID) : undefined;
+    const model = this.currentModel();
+    const icon = this.options.smallImage.enabled && model ? this.iconFor(model.providerID) : undefined;
 
     client.user
       ?.setActivity({
@@ -310,9 +327,7 @@ export class Presence {
         largeImageKey: this.options.largeImage.key,
         largeImageText: this.options.largeImage.text,
         ...(icon === undefined ? {} : { smallImageKey: icon }),
-        ...(icon === undefined || !this.model
-          ? {}
-          : { smallImageText: `${this.model.providerID}/${this.model.modelID}` }),
+        ...(icon === undefined || !model ? {} : { smallImageText: `${model.providerID}/${model.modelID}` }),
       })
       ?.catch?.(() => {});
   }
@@ -373,7 +388,7 @@ export class Presence {
   private renderField(field: LineField): string {
     switch (field) {
       case "model":
-        return this.model?.modelID ?? "";
+        return this.currentModel()?.modelID ?? "";
       case "status":
         return this.options.status.labels[this.status] ?? "";
       case "tokens":

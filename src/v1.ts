@@ -86,7 +86,7 @@ export async function createV1Hooks(input: V1Input, rawOptions?: RichOptions | R
           presence.setCurrentSession(message.sessionID as string);
           presence.setStatus("working");
           const model = message.model as { providerID: string; modelID: string } | undefined;
-          if (model) presence.setModel({ providerID: model.providerID, modelID: model.modelID });
+          if (model) presence.setModel(message.sessionID as string, { providerID: model.providerID, modelID: model.modelID });
           return;
         }
 
@@ -98,7 +98,7 @@ export async function createV1Hooks(input: V1Input, rawOptions?: RichOptions | R
           void rememberParent(assistant.sessionID);
         }
         presence.setCurrentSession(assistant.sessionID);
-        presence.setModel({ providerID: assistant.providerID, modelID: assistant.modelID });
+        presence.setModel(assistant.sessionID, { providerID: assistant.providerID, modelID: assistant.modelID });
         if (assistant.path?.cwd) presence.setProjectDir(assistant.path.cwd);
         presence.setAgent(assistant.sessionID, assistant.mode);
 

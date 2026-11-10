@@ -21,6 +21,19 @@ const STATUS_POLL_MS = 5_000;
 const LOCK_PATH = join(homedir(), ".local", "share", "opencode", "rich-opencode.lock");
 const LOCK_STALE_MS = 15_000;
 
+/** Written by the TUI part: the chat currently open in the terminal. */
+const FOCUS_PATH = join(homedir(), ".local", "share", "opencode", "rich-opencode-focus.json");
+
+type FocusFile = { sessionID?: string; route?: string; time?: number };
+
+function readFocus(): FocusFile | null {
+  try {
+    return JSON.parse(readFileSync(FOCUS_PATH, "utf8")) as FocusFile;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Seconds since the last keyboard/mouse input anywhere on the machine.
  * OpenCode does not broadcast prompt typing (the TUI keeps the draft local),
@@ -129,12 +142,20 @@ export function createV2Plugin() {
       let frontmostApp: string | null = null;
       let lastSessionEvent = Date.now();
       let activeSessionID: string | null = null;
+      let focusSessionID: string | null = null;
       let leader = false;
 
       const derive = () => {
-        if (reasoning.size > 0) {
+        // Only count activity from the open chat (and its sub-agents) when we
+        // know which chat the TUI has focused.
+        const inFocus = (sessionID: string) =>
+          focusSessionID === null || presence.belongsToCurrentSession(sessionID);
+        const thinking = [...reasoning].some(inFocus);
+        const working = [...executing].some(inFocus);
+
+        if (thinking) {
           presence.setStatus("thinking");
-        } else if (executing.size > 0) {
+        } else if (working) {
           presence.setStatus("working");
         } else if (
           systemIdleMs !== null &&
@@ -146,6 +167,22 @@ export function createV2Plugin() {
           presence.setStatus("idle");
         }
       };
+
+      const setFocus = (sessionID: string | null) => {
+        if (sessionID === focusSessionID) return;
+        focusSessionID = sessionID;
+        debugLog({ type: "focus", sessionID });
+        if (!sessionID) return;
+        activeSessionID = sessionID;
+        presence.setCurrentSession(sessionID);
+        void inspect(sessionID);
+        derive();
+      };
+
+      const focusPoll = setInterval(() => {
+        const focus = readFocus();
+        if (focus?.sessionID) setFocus(focus.sessionID);
+      }, 1_000);
 
       const ensureLeader = () => {
         if (!options.leaderLock) {
@@ -204,7 +241,7 @@ export function createV2Plugin() {
               message.tokens.output + message.tokens.reasoning,
             );
             if (message.model) {
-              presence.setModel({ providerID: message.model.providerID, modelID: message.model.id });
+              presence.setModel(sessionID, { providerID: message.model.providerID, modelID: message.model.id });
             }
             break;
           }
@@ -222,7 +259,7 @@ export function createV2Plugin() {
           presence.rememberSession(info.id, info.parentID);
           presence.rememberDirectory(info.id, info.location?.directory);
           presence.setAgent(info.id, info.agent);
-          if (info.model) presence.setModel({ providerID: info.model.providerID, modelID: info.model.id });
+          if (info.model) presence.setModel(info.id, { providerID: info.model.providerID, modelID: info.model.id });
           if (leader) void seedContext(info.id);
         } catch {
           inspected.delete(sessionID);
@@ -240,7 +277,7 @@ export function createV2Plugin() {
                 presence.rememberDirectory(data.sessionID, data.location?.directory);
                 if (data.agent) presence.setAgent(data.sessionID, data.agent);
                 if (data.model) {
-                  presence.setModel({ providerID: data.model.providerID, modelID: data.model.id });
+                  presence.setModel(data.sessionID, { providerID: data.model.providerID, modelID: data.model.id });
                 }
                 // Do not steal the card for a freshly opened empty session.
                 void inspect(data.sessionID);
@@ -256,22 +293,26 @@ export function createV2Plugin() {
               }
 
               case "session.viewed": {
-                activeSessionID = event.data.sessionID;
-                presence.setCurrentSession(event.data.sessionID);
+                // A TUI viewed a session (user switched to it) — that is a focus signal.
+                setFocus(event.data.sessionID);
                 void inspect(event.data.sessionID);
                 break;
               }
 
               case "session.model.selected": {
                 const data = event.data;
-                presence.setModel({ providerID: data.model.providerID, modelID: data.model.id });
+                presence.setModel(data.sessionID, { providerID: data.model.providerID, modelID: data.model.id });
                 break;
               }
 
               case "session.usage.updated": {
                 const data = event.data;
-                activeSessionID = data.sessionID;
-                presence.setCurrentSession(data.sessionID);
+                // While a chat is focused, activity from other chats must not
+                // take over the card.
+                if (focusSessionID === null || data.sessionID === focusSessionID) {
+                  activeSessionID = data.sessionID;
+                  presence.setCurrentSession(data.sessionID);
+                }
                 presence.setUsage(data.sessionID, {
                   tokensInput: data.tokens.input,
                   tokensOutput: data.tokens.output + data.tokens.reasoning,
@@ -280,6 +321,12 @@ export function createV2Plugin() {
                 // A session that existed before the plugin loaded never emitted
                 // session.created here, so fetch its model/agent on first usage.
                 void inspect(data.sessionID);
+                break;
+              }
+
+              case "session.inbox.enqueued": {
+                // A real user prompt landed in this session — the user is there.
+                if (event.data.item.type === "user") setFocus(event.data.sessionID);
                 break;
               }
 
@@ -311,7 +358,17 @@ export function createV2Plugin() {
                 break;
               }
 
-              case "session.step.started":
+              case "session.step.started": {
+                const data = event.data;
+                if (data.model) {
+                  presence.setModel(data.sessionID, { providerID: data.model.providerID, modelID: data.model.id });
+                }
+                if (data.agent) presence.setAgent(data.sessionID, data.agent);
+                executing.add(data.sessionID);
+                lastSessionEvent = Date.now();
+                break;
+              }
+
               case "session.text.started":
               case "session.tool.called":
               case "session.tool.progress": {
@@ -341,6 +398,7 @@ export function createV2Plugin() {
 
       return () => {
         clearInterval(poll);
+        clearInterval(focusPoll);
         controller.abort();
         presence.dispose();
         if (options.leaderLock && leader) releaseLock();
