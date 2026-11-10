@@ -27,6 +27,8 @@ export interface ModelRef {
 const OPENCODE_ASSET_KEY = "logo";
 const DEFAULT_CLIENT_ID = "1505556269036077178";
 const UPDATE_DEBOUNCE_MS = 3000;
+/** A continuous idle stretch this long ends the current play session. */
+const IDLE_RESET_MS = 30 * 60_000;
 const MAX_DEBUG_LOG_BYTES = 5 * 1024 * 1024;
 const STALE_LOG_MS = 7 * 24 * 60 * 60 * 1000; // rotated debug logs older than this are removed
 
@@ -100,9 +102,10 @@ export class Presence {
   private readonly sessions = new Set<string>();
   private readonly parents = new Map<string, string | undefined>();
   private readonly usage = new Map<string, SessionUsage>();
-  private readonly created = new Map<string, number>();
   private readonly contextUsage = new Map<string, { input: number; output: number }>();
-  private readonly pluginStartedAt = Date.now();
+  /** Start of the current "play session"; reset after a long idle stretch. */
+  private activityStartedAt: number | null = null;
+  private idleSince: number | null = null;
 
   private currentSessionID: string | null = null;
   private model: ModelRef | null = null;
@@ -225,14 +228,19 @@ export class Presence {
   }
 
   setStatus(status: PresenceStatus): void {
+    const now = Date.now();
+    if (status === "idle") {
+      // Idle still counts as play time, but a long break starts a new session.
+      if (this.idleSince === null) this.idleSince = now;
+      if (now - this.idleSince >= IDLE_RESET_MS) this.activityStartedAt = null;
+    } else {
+      this.idleSince = null;
+      if (this.activityStartedAt === null) this.activityStartedAt = now;
+    }
     if (this.status === status) return;
     this.status = status;
     debugLog({ type: "status", status });
     this.queue();
-  }
-
-  rememberCreated(sessionID: string, createdAt: number): void {
-    if (createdAt > 0) this.created.set(sessionID, createdAt);
   }
 
   /** Context usage of the latest model call, matching OpenCode's sidebar number. */
@@ -271,8 +279,7 @@ export class Presence {
   flush(): void {
     const details = this.buildDetails();
     const state = this.buildState();
-    const startedAt = this.currentSessionID ? this.created.get(this.currentSessionID) : undefined;
-    const startTimestamp = Math.floor((startedAt ?? this.pluginStartedAt) / 1000);
+    const startTimestamp = this.activityStartedAt ? Math.floor(this.activityStartedAt / 1000) : undefined;
     debugLog({ type: "flush", details, state, startTimestamp, connected: Boolean(this.client?.isConnected) });
 
     const client = this.client;
@@ -282,7 +289,7 @@ export class Presence {
       ?.setActivity({
         details,
         state,
-        startTimestamp,
+        ...(startTimestamp === undefined ? {} : { startTimestamp }),
         largeImageKey: OPENCODE_ASSET_KEY,
         largeImageText: "OpenCode",
       })

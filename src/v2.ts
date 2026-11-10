@@ -182,6 +182,8 @@ export function createV2Plugin() {
 
       const refresh = async () => {
         ensureLeader();
+        // Dormant instances only watch the lock; they don't need OS polling.
+        if (!leader) return;
         systemIdleMs = await readSystemIdleMs();
         frontmostApp =
           systemIdleMs !== null && systemIdleMs < PROMPTING_IDLE_MS ? await readFrontmostApp() : null;
@@ -190,15 +192,13 @@ export function createV2Plugin() {
           reasoning.clear();
         }
         derive();
-        if (leader) {
-          debugLog({
-            type: "refresh",
-            systemIdleMs,
-            frontmostApp,
-            executing: executing.size,
-            reasoning: reasoning.size,
-          });
-        }
+        debugLog({
+          type: "refresh",
+          systemIdleMs,
+          frontmostApp,
+          executing: executing.size,
+          reasoning: reasoning.size,
+        });
       };
 
       const poll = setInterval(() => void refresh(), STATUS_POLL_MS);
@@ -234,7 +234,6 @@ export function createV2Plugin() {
           presence.rememberSession(info.id, info.parentID);
           if (info.location?.directory) presence.setProjectDir(info.location.directory);
           if (info.model) presence.setModel({ providerID: info.model.providerID, modelID: info.model.id });
-          if (info.time?.created) presence.rememberCreated(info.id, info.time.created);
           if (leader) void seedContext(info.id);
         } catch {
           inspected.delete(sessionID);
