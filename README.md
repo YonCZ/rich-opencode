@@ -1,8 +1,6 @@
 # Rich Opencode
 
-A **highly configurable Discord Rich Presence plugin for [OpenCode](https://opencode.ai)**.
-
-Show your model, context usage, activity status and a play-session timer on your Discord profile — arranged exactly how you want them.
+Discord Rich Presence plugin for [OpenCode](https://opencode.ai). It shows what you are doing in OpenCode on your Discord profile. You choose what goes on each line.
 
 ```
 Playing opencode
@@ -11,29 +9,48 @@ deepseek-v4.1-flash
 01:23:45 elapsed
 ```
 
-## Features
+## What it does
 
-- **Follows your open chat** — a tiny TUI part reports which chat is open, so the card shows that chat's model and tokens instead of whatever ran last
-- **Fully configurable layout** — choose which fields go on line 1 and line 2, in any order, with any separator
-- **Fields**: model, token usage, cost, activity status, project name, agent, and custom literal text
-- **Two token modes** — `context` (latest model call, matches OpenCode's sidebar "Context" number) or `cumulative` (session totals)
-- **Activity status** — `Thinking` (model reasoning), `Working` (tools, streaming, execution), `Prompting` (you're typing), `Idle`
-- **Play-session timer** — counts continuously through idle, starts a new session after a long break
-- **Custom Discord app** — optional `clientId` for your own app name, logo and assets
-- **One Discord connection per machine** — a leader lock prevents the duplicate-connection storms that happen when OpenCode loads a plugin per project location
-- **Resilient** — retries the Discord handshake with backoff, reconnects after Discord restarts
-- **Privacy-conscious** — the project name is never shown unless you add the `project` field
+The plugin reads OpenCode's event stream and session data. You place fields on either line, in any order, joined by the separator you pick.
+
+Available fields:
+
+| Field | Example | Notes |
+| --- | --- | --- |
+| `model` | `deepseek-v4.1-flash` | model id |
+| `modelName` | `DeepSeek V4.1 Flash` | display name from the model catalog |
+| `provider` | `einfra` | provider id |
+| `variant` | `high` | model variant |
+| `tokens` | `↓ 298.8k \| ↑ 398` | context usage or session totals |
+| `tokenPercent` | `34%` | context used against the model limit |
+| `cost` | `$0.52` | cumulative session cost |
+| `status` | `Working` | Thinking, Working, Prompting or Idle |
+| `project` | `Programming` | project folder name |
+| `agent` | `build` | active agent id |
+| `title` | `Discord Rich Presence` | session title, visible on your profile |
+| `text:<anything>` | `in opencode` | literal text |
+
+Other features:
+
+- two token modes, `context` for the latest model call and `cumulative` for session totals
+- a play-session timer that counts idle time and resets after a long break
+- the card follows the chat open in your TUI, not the chat that ran last
+- optional custom Discord application, logo and provider icons
+- one Discord connection per machine, with reconnect and retry
+- the project name and session title are hidden unless you add those fields
 
 ## Requirements
 
-- **OpenCode 2.x** (OpenCode 1.18.29+ is also supported)
-- **Discord desktop app** running on the same machine (browser Discord does not expose the IPC socket)
-- In Discord: **User Settings → Activity Privacy → "Display current activity as a status message"** must be ON
-- The `Prompting` heuristics use macOS system APIs (`ioreg`, `lsappinfo`); on other platforms the plugin still works, but `Prompting` stays off and `Idle` is used instead
+- OpenCode 2.x. OpenCode 1.18.29 and newer also work.
+- Discord desktop app running on the same machine. Discord in a browser cannot reach the local IPC socket.
+- In Discord, open User Settings, then Activity Privacy, and turn on "Display current activity as a status message".
+- The Prompting state uses macOS system APIs. On other platforms the plugin works, but Prompting stays off and the card shows Idle instead.
 
-## Install
+## Install with an AI agent
 
-Rich Opencode is installed from a local checkout (npm publishing planned):
+Point your agent at [AGENT_INSTALL.md](AGENT_INSTALL.md). It contains the commands, the config merge, verification and troubleshooting.
+
+## Install manually
 
 ```bash
 git clone https://github.com/YonCZ/rich-opencode.git
@@ -42,7 +59,7 @@ npm install
 npm run build
 ```
 
-Then register it in `~/.config/opencode/opencode.json` (or a project `opencode.json`):
+Register the plugin in `~/.config/opencode/opencode.json`. Use the absolute path to the checkout:
 
 ```jsonc
 {
@@ -56,15 +73,15 @@ Then register it in `~/.config/opencode/opencode.json` (or a project `opencode.j
 }
 ```
 
-Save the config (OpenCode hot-reloads) or run `opencode service restart`.
+Save the file. OpenCode reloads the config. If the plugin does not appear, run `opencode service restart`.
 
-> Restart your OpenCode TUI once after installing. The plugin ships a tiny TUI part that reports the open chat; it only loads when the TUI starts.
+Restart your OpenCode TUI once after installing. The plugin includes a TUI part that reports the open chat, and the TUI loads it at startup.
 
-> The `options` block below is optional — every setting has a default.
+The `options` object is optional. Every setting has a default.
 
 ## Configuration
 
-All options live in the `options` object of the plugin entry:
+All settings go in the `options` object of the plugin entry.
 
 ```jsonc
 {
@@ -84,55 +101,38 @@ All options live in the `options` object of the plugin entry:
 }
 ```
 
-### Lines and fields
+`details` is the first line, `state` is the second line. Fields render in order, and empty fields are skipped.
 
-`details` is line 1, `state` is line 2. Fields render in order and empty ones are skipped.
-
-| Field | Renders |
-| --- | --- |
-| `model` | the active model id, e.g. `deepseek-v4.1-flash` |
-| `modelName` | the model's display name, e.g. `DeepSeek V4.1 Flash` |
-| `provider` | the provider id, e.g. `einfra` |
-| `variant` | the model variant, e.g. `high` |
-| `tokens` | token usage, e.g. `↓ 298.8k \| ↑ 398` |
-| `tokenPercent` | context used as a percentage of the model limit, e.g. `34%` |
-| `cost` | cumulative session cost, e.g. `$0.52` |
-| `status` | `Thinking` / `Working` / `Prompting` / `Idle` |
-| `project` | the project folder name |
-| `agent` | the active agent id |
-| `title` | the session title (⚠️ visible to anyone who can see your profile) |
-| `text:<anything>` | literal text, e.g. `"text:in opencode"` |
-
-### Options reference
+### Options
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `clientId` | built-in shared app | Discord application id (see [Custom Discord app](#custom-discord-app)) |
-| `details` | `["model"]` | line 1 fields |
-| `state` | `["tokens", "status"]` | line 2 fields |
+| `clientId` | built-in shared app | Discord application id |
+| `details` | `["model"]` | fields on the first line |
+| `state` | `["tokens", "status"]` | fields on the second line |
 | `separator` | `" · "` | joins non-empty fields |
-| `tokens.mode` | `"context"` | `context` = latest model call (matches OpenCode's sidebar), `cumulative` = session totals |
-| `tokens.showInput` | `true` | show the input/context half |
+| `tokens.mode` | `"context"` | `context` matches OpenCode's sidebar, `cumulative` sums the session |
+| `tokens.showInput` | `true` | show the input half |
 | `tokens.showOutput` | `true` | show the output half |
 | `tokens.inputPrefix` | `"↓"` | prefix for input tokens |
 | `tokens.outputPrefix` | `"↑"` | prefix for output tokens |
-| `cost.format` | `"${amount}"` | `{amount}` is replaced with the number (the field is shown when `cost` is in a line) |
-| `status.labels.*` | `Thinking` / `Working` / `Prompting` / `Idle` | rename or translate the states |
+| `cost.format` | `"${amount}"` | amount format, for example `"{amount} USD"` |
+| `status.labels` | English labels | rename or translate the four states |
 | `prompting.idleSeconds` | `60` | input within this window counts as prompting |
-| `prompting.frontmostOnly` | `true` | require one of `prompting.apps` to be frontmost (macOS) |
-| `prompting.apps` | Terminal, iTerm2, Ghostty, Warp, VS Code, Cursor, … | apps that count as "the opencode window" |
-| `timer.enabled` | `true` | show the Discord elapsed timer |
-| `timer.idleResetMinutes` | `30` | a continuous idle stretch this long starts a new play session |
-| `largeImage.key` | `"logo"` | Discord asset key for the large image |
+| `prompting.frontmostOnly` | `true` | require one of the apps below to be frontmost, macOS only |
+| `prompting.apps` | Terminal, iTerm2, Ghostty, Warp, VS Code, Cursor and others | apps that count as the opencode window |
+| `timer.enabled` | `true` | show the elapsed timer |
+| `timer.idleResetMinutes` | `30` | a continuous idle stretch this long starts a new timer |
+| `largeImage.key` | `"logo"` | asset key for the large image |
 | `largeImage.text` | `"OpenCode"` | hover text for the large image |
-| `smallImage.enabled` | `false` | show a small provider icon |
-| `smallImage.providerIcons` | `{}` | override icon URLs per provider id |
-| `debug` | `false` | log lifecycle and flush details to `~/.local/share/opencode/rich-opencode-debug.log` |
+| `smallImage.enabled` | `false` | show a provider icon |
+| `smallImage.providerIcons` | `{}` | icon URLs by provider id |
+| `debug` | `false` | write a log to `~/.local/share/opencode/rich-opencode-debug.log` |
 | `leaderLock` | `true` | let one plugin instance own the Discord connection |
 
 ### Examples
 
-**Everything on two lines**
+Everything on two lines:
 
 ```jsonc
 "options": {
@@ -141,28 +141,27 @@ All options live in the `options` object of the plugin entry:
 }
 ```
 
-**Literal text + cost**
+Show the price:
 
 ```jsonc
 "options": {
-  "details": ["text:Rich Opencode", "project"],
-  "state": ["modelName", "tokens", "cost", "status"],
-  "tokens": { "mode": "cumulative" },
-  "cost": { "format": "{amount} USD" }
+  "details": ["modelName"],
+  "state": ["tokens", "cost", "status"],
+  "cost": { "format": "${amount}" }
 }
 ```
 
-**Localized labels and a custom separator**
+Custom status labels and separator:
 
 ```jsonc
 "options": {
-  "separator": " — ",
+  "separator": " | ",
   "status": {
     "labels": {
-      "thinking": "Přemýšlí",
-      "working": "Pracuje",
-      "prompting": "Píše",
-      "idle": "Nečinný"
+      "thinking": "Thinking hard",
+      "working": "Doing the thing",
+      "prompting": "Your move",
+      "idle": "Away"
     }
   }
 }
@@ -170,54 +169,53 @@ All options live in the `options` object of the plugin entry:
 
 ## How it works
 
-Rich Opencode runs as an OpenCode server plugin and subscribes to the V2 event stream:
+The plugin subscribes to the OpenCode V2 event stream.
 
-| Status | Source |
+| State | Source |
 | --- | --- |
-| `Thinking` | `session.reasoning.started` → `session.reasoning.ended` |
-| `Working` | `session.execution.started`, tool calls, text streaming, step starts |
-| `Prompting` | no agent activity, recent keyboard/mouse input, and (optionally) the terminal is frontmost |
-| `Idle` | nothing running and no recent input |
+| Thinking | `session.reasoning.started` until `session.reasoning.ended` |
+| Working | `session.execution.started`, tool calls, text streaming, step starts |
+| Prompting | no agent activity, recent keyboard or mouse input, and the terminal is frontmost |
+| Idle | nothing running and no recent input |
 
-Token numbers come from `session.step.ended` — the latest model call — so the card matches the "Context" number in OpenCode's sidebar instead of inflating to the whole session's cumulative usage.
+Token numbers come from `session.step.ended`, so the card shows the latest model call. The value matches the Context number in OpenCode's sidebar. The `cumulative` token mode uses the session totals instead, which is what the old RPC plugins showed.
+
+The timer starts with the first activity and keeps counting through idle. A continuous idle stretch of `timer.idleResetMinutes` starts a new session timer, so opening an old chat does not show a 100 hour timer.
 
 ### Which chat is shown
 
-OpenCode's server does not broadcast focus changes, so the plugin's TUI part writes the currently open chat to `~/.local/share/opencode/rich-opencode-focus.json` (on route change). The server follows that file, which means:
+The OpenCode server does not report focus changes. The plugin's TUI part writes the open chat to `~/.local/share/opencode/rich-opencode-focus.json` on route changes. The server follows that file.
 
-- switching chats/tabs updates the card immediately
-- a background chat that runs or finishes **does not** take over the card
-- switching between separate terminal windows without changing the chat is not detectable (open the chat or send a prompt and it updates)
+- switching chats or tabs updates the card immediately
+- a background chat that runs or finishes does not take over the card
+- switching between terminal windows without changing the chat cannot be detected. Open the chat or send a prompt and the card updates.
+- if the TUI part is missing, the plugin falls back to the session that ran last
 
-If the TUI part is unavailable (e.g. an older TUI), the plugin falls back to activity-based switching.
+### Prompting
 
-The elapsed timer starts with the first activity and keeps counting through idle. A continuous idle stretch of `timer.idleResetMinutes` starts a new play session, so an old session opened days later doesn't show a 100+ hour timer.
+OpenCode does not send prompt typing to plugins. The TUI keeps the draft local, and `tui.prompt.append` is an inbound command. Prompting therefore uses macOS system idle time and the frontmost app. It appears only when you used the keyboard or mouse in the last 60 seconds and the terminal is frontmost. On other platforms this state stays off.
 
-OpenCode loads one plugin instance per project location. `leaderLock` lets exactly one of them own the Discord IPC connection (lock file: `~/.local/share/opencode/rich-opencode.lock`), and the leader retries with backoff if the 10s Discord handshake times out.
+### Multiple instances
 
-### Prompting caveat
-
-OpenCode does not broadcast prompt typing — the TUI keeps your prompt draft local (`tui.prompt.append` is an inbound command, not a typing signal). `Prompting` therefore approximates "you're typing" with macOS system input activity plus the frontmost app check. On non-macOS platforms it stays off.
+OpenCode loads one plugin instance per project location. The `leaderLock` option lets one instance own the Discord connection, with a lock file at `~/.local/share/opencode/rich-opencode.lock`. The leader retries the Discord handshake with backoff if it times out.
 
 ## Custom Discord app
 
-For your own name, logo and assets:
-
-1. Create an application at [discord.com/developers/applications](https://discord.com/developers/applications) — the app name becomes the "Playing …" headline
-2. Copy the **Application ID** → `clientId`
-3. Under **Rich Presence → Art Assets**, upload your large image with the asset key used by `largeImage.key` (default `logo`)
-4. Optionally upload provider icons and map them via `smallImage.providerIcons`
+1. Create an application at [discord.com/developers/applications](https://discord.com/developers/applications). The app name becomes the "Playing" headline.
+2. Copy the Application ID and set it as `clientId`.
+3. Open Rich Presence, then Art Assets, and upload your large image with the key used by `largeImage.key`. The default key is `logo`.
+4. Optional: upload provider icons and map them in `smallImage.providerIcons`.
 
 ## Development
 
 ```bash
-npm run build       # tsc → dist/
+npm run build       # compile to dist/
 npm run typecheck   # type check only
-npm run preview     # flash a sample card in Discord for ~5s (optionally pass a status: preview thinking)
-npm run diagnose    # open a single raw RPC connection for 10 minutes
+npm run preview     # show a sample card in Discord for 5 seconds
+npm run diagnose    # open one raw RPC connection for 10 minutes
 ```
 
-Set `"debug": true` in the options to get a log at `~/.local/share/opencode/rich-opencode-debug.log` (rotated at 5 MB).
+Set `"debug": true` to write a log to `~/.local/share/opencode/rich-opencode-debug.log`. The log rotates at 5 MB.
 
 ## License
 
@@ -225,4 +223,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Credits
 
-Rich Opencode is a heavily modified fork of [butterbrodskiy/opencode-rpc](https://github.com/butterbrodskiy/opencode-rpc) (MIT), which this project would not exist without. Thanks also to the OpenCode team for the plugin event API.
+Rich Opencode is a modified fork of [butterbrodskiy/opencode-rpc](https://github.com/butterbrodskiy/opencode-rpc), released under MIT. Thanks to the OpenCode team for the plugin event API.
