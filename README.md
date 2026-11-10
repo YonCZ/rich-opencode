@@ -91,11 +91,16 @@ All options live in the `options` object of the plugin entry:
 | Field | Renders |
 | --- | --- |
 | `model` | the active model id, e.g. `deepseek-v4.1-flash` |
+| `modelName` | the model's display name, e.g. `DeepSeek V4.1 Flash` |
+| `provider` | the provider id, e.g. `einfra` |
+| `variant` | the model variant, e.g. `high` |
 | `tokens` | token usage, e.g. `↓ 298.8k \| ↑ 398` |
-| `cost` | cumulative session cost, e.g. `$1.42` |
+| `tokenPercent` | context used as a percentage of the model limit, e.g. `34%` |
+| `cost` | cumulative session cost, e.g. `$0.52` |
 | `status` | `Thinking` / `Working` / `Prompting` / `Idle` |
 | `project` | the project folder name |
 | `agent` | the active agent id |
+| `title` | the session title (⚠️ visible to anyone who can see your profile) |
 | `text:<anything>` | literal text, e.g. `"text:in opencode"` |
 
 ### Options reference
@@ -111,8 +116,7 @@ All options live in the `options` object of the plugin entry:
 | `tokens.showOutput` | `true` | show the output half |
 | `tokens.inputPrefix` | `"↓"` | prefix for input tokens |
 | `tokens.outputPrefix` | `"↑"` | prefix for output tokens |
-| `cost.show` | `false` | include cost in the `cost` field |
-| `cost.format` | `"${amount}"` | `{amount}` is replaced with the number |
+| `cost.format` | `"${amount}"` | `{amount}` is replaced with the number (the field is shown when `cost` is in a line) |
 | `status.labels.*` | `Thinking` / `Working` / `Prompting` / `Idle` | rename or translate the states |
 | `prompting.idleSeconds` | `60` | input within this window counts as prompting |
 | `prompting.frontmostOnly` | `true` | require one of `prompting.apps` to be frontmost (macOS) |
@@ -137,14 +141,14 @@ All options live in the `options` object of the plugin entry:
 }
 ```
 
-**Literal text + total usage**
+**Literal text + cost**
 
 ```jsonc
 "options": {
   "details": ["text:Rich Opencode", "project"],
-  "state": ["tokens", "cost", "status"],
+  "state": ["modelName", "tokens", "cost", "status"],
   "tokens": { "mode": "cumulative" },
-  "cost": { "show": true }
+  "cost": { "format": "{amount} USD" }
 }
 ```
 

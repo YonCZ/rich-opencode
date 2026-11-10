@@ -17,6 +17,12 @@ export interface SessionUsage {
 export interface ModelRef {
   providerID: string;
   modelID: string;
+  variant?: string;
+}
+
+export interface ModelInfoLite {
+  name?: string;
+  contextLimit?: number;
 }
 
 const DEFAULT_CLIENT_ID = "1505556269036077178";
@@ -81,8 +87,8 @@ export function normalizeModel(model: ModelRef): ModelRef {
     : model.modelID;
 
   const slash = raw.indexOf("/");
-  if (slash === -1) return { providerID: raw, modelID: "" };
-  return { providerID: raw.slice(0, slash), modelID: raw.slice(slash + 1) };
+  if (slash === -1) return { providerID: raw, modelID: "", variant: model.variant };
+  return { providerID: raw.slice(0, slash), modelID: raw.slice(slash + 1), variant: model.variant };
 }
 
 function modelsDevIconUrl(providerID: string): string {
@@ -110,6 +116,8 @@ export class Presence {
 
   private currentSessionID: string | null = null;
   private readonly models = new Map<string, ModelRef>();
+  private readonly modelInfo = new Map<string, ModelInfoLite>();
+  private readonly titles = new Map<string, string>();
   private projectDir: string;
   private status: PresenceStatus = "idle";
 
@@ -240,6 +248,16 @@ export class Presence {
 
   currentModel(): ModelRef | null {
     return this.currentSessionID ? (this.models.get(this.currentSessionID) ?? null) : null;
+  }
+
+  /** Catalog data (display name, context limit) keyed by provider/model. */
+  setModelInfo(providerID: string, modelID: string, info: ModelInfoLite): void {
+    this.modelInfo.set(`${providerID}/${modelID}`, info);
+    this.queue();
+  }
+
+  setTitle(sessionID: string, title: string | undefined): void {
+    if (title) this.titles.set(sessionID, title);
   }
 
   setProjectDir(directory: string): void {
@@ -389,10 +407,21 @@ export class Presence {
     switch (field) {
       case "model":
         return this.currentModel()?.modelID ?? "";
+      case "modelName": {
+        const ref = this.currentModel();
+        if (!ref) return "";
+        return this.modelInfo.get(`${ref.providerID}/${ref.modelID}`)?.name ?? ref.modelID;
+      }
+      case "provider":
+        return this.currentModel()?.providerID ?? "";
+      case "variant":
+        return this.currentModel()?.variant ?? "";
       case "status":
         return this.options.status.labels[this.status] ?? "";
       case "tokens":
         return this.renderTokens();
+      case "tokenPercent":
+        return this.renderTokenPercent();
       case "cost":
         return this.renderCost();
       case "project":
@@ -401,6 +430,8 @@ export class Presence {
         if (!this.currentSessionID) return "";
         return this.agents.get(this.currentSessionID) ?? "";
       }
+      case "title":
+        return this.currentSessionID ? (this.titles.get(this.currentSessionID) ?? "") : "";
       default:
         return field.startsWith("text:") ? field.slice("text:".length) : "";
     }
@@ -430,6 +461,18 @@ export class Presence {
       parts.push(`${this.options.tokens.outputPrefix} ${formatTokens(output)}`);
     }
     return parts.join(" | ");
+  }
+
+  private renderTokenPercent(): string {
+    if (!this.currentSessionID) return "";
+    const usage = this.contextUsage.get(this.currentSessionID);
+    const ref = this.currentModel();
+    if (!usage || !ref) return "";
+    const limit = this.modelInfo.get(`${ref.providerID}/${ref.modelID}`)?.contextLimit;
+    if (!limit || limit <= 0) return "";
+    const total = usage.input + usage.output;
+    if (total <= 0) return "";
+    return `${Math.round((total / limit) * 100)}%`;
   }
 
   private renderCost(): string {

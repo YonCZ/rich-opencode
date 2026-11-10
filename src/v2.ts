@@ -135,6 +135,21 @@ export function createV2Plugin() {
       const promptingIdleMs = options.prompting.idleSeconds * 1000;
       const frontmostApps = new Set(options.prompting.apps);
 
+      const loadModels = async () => {
+        try {
+          const result = await ctx.model.list();
+          for (const model of result.data) {
+            presence.setModelInfo(model.providerID, model.id, {
+              name: model.name,
+              contextLimit: model.limit?.context,
+            });
+          }
+        } catch {
+          // model catalog may not be ready yet
+        }
+      };
+      void loadModels();
+
       const executing = new Set<string>();
       const reasoning = new Set<string>();
       const inspected = new Set<string>();
@@ -241,7 +256,11 @@ export function createV2Plugin() {
               message.tokens.output + message.tokens.reasoning,
             );
             if (message.model) {
-              presence.setModel(sessionID, { providerID: message.model.providerID, modelID: message.model.id });
+              presence.setModel(sessionID, {
+                providerID: message.model.providerID,
+                modelID: message.model.id,
+                variant: message.model.variant,
+              });
             }
             break;
           }
@@ -259,7 +278,18 @@ export function createV2Plugin() {
           presence.rememberSession(info.id, info.parentID);
           presence.rememberDirectory(info.id, info.location?.directory);
           presence.setAgent(info.id, info.agent);
-          if (info.model) presence.setModel(info.id, { providerID: info.model.providerID, modelID: info.model.id });
+          presence.setTitle(info.id, info.title);
+          presence.setUsage(info.id, {
+            tokensInput: info.tokens?.input ?? 0,
+            tokensOutput: (info.tokens?.output ?? 0) + (info.tokens?.reasoning ?? 0),
+            cost: info.cost ?? 0,
+          });
+          if (info.model)
+            presence.setModel(info.id, {
+              providerID: info.model.providerID,
+              modelID: info.model.id,
+              variant: info.model.variant,
+            });
           if (leader) void seedContext(info.id);
         } catch {
           inspected.delete(sessionID);
@@ -276,8 +306,13 @@ export function createV2Plugin() {
                 presence.rememberSession(data.sessionID, data.parentID);
                 presence.rememberDirectory(data.sessionID, data.location?.directory);
                 if (data.agent) presence.setAgent(data.sessionID, data.agent);
+                presence.setTitle(data.sessionID, data.title);
                 if (data.model) {
-                  presence.setModel(data.sessionID, { providerID: data.model.providerID, modelID: data.model.id });
+                  presence.setModel(data.sessionID, {
+                    providerID: data.model.providerID,
+                    modelID: data.model.id,
+                    variant: data.model.variant,
+                  });
                 }
                 // Do not steal the card for a freshly opened empty session.
                 void inspect(data.sessionID);
@@ -301,7 +336,11 @@ export function createV2Plugin() {
 
               case "session.model.selected": {
                 const data = event.data;
-                presence.setModel(data.sessionID, { providerID: data.model.providerID, modelID: data.model.id });
+                presence.setModel(data.sessionID, {
+                  providerID: data.model.providerID,
+                  modelID: data.model.id,
+                  variant: data.model.variant,
+                });
                 break;
               }
 
@@ -361,11 +400,21 @@ export function createV2Plugin() {
               case "session.step.started": {
                 const data = event.data;
                 if (data.model) {
-                  presence.setModel(data.sessionID, { providerID: data.model.providerID, modelID: data.model.id });
+                  presence.setModel(data.sessionID, {
+                    providerID: data.model.providerID,
+                    modelID: data.model.id,
+                    variant: data.model.variant,
+                  });
                 }
                 if (data.agent) presence.setAgent(data.sessionID, data.agent);
                 executing.add(data.sessionID);
                 lastSessionEvent = Date.now();
+                break;
+              }
+
+              case "model.updated":
+              case "models-dev.refreshed": {
+                void loadModels();
                 break;
               }
 

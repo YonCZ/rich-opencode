@@ -70,6 +70,7 @@ export async function createV1Hooks(input: V1Input, rawOptions?: RichOptions | R
         const info = (event as unknown as { properties: { info: Session } }).properties.info;
         debugLog({ type: "session.created", id: info.id, parentID: info.parentID });
         presence.rememberSession(info.id, info.parentID);
+        presence.setTitle(info.id, info.title);
         presence.setCurrentSession(info.id, info.directory);
       }
 

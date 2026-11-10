@@ -1,7 +1,19 @@
 import type { PresenceStatus } from "./presence.js";
 
 /** Which fields a line can render, in order. `text:...` renders a literal. */
-export type LineField = "model" | "tokens" | "cost" | "status" | "project" | "agent" | `text:${string}`;
+export type LineField =
+  | "model"
+  | "modelName"
+  | "provider"
+  | "variant"
+  | "tokens"
+  | "tokenPercent"
+  | "cost"
+  | "status"
+  | "project"
+  | "agent"
+  | "title"
+  | `text:${string}`;
 
 export interface TokenOptions {
   /** `context` = latest model call (matches OpenCode's sidebar), `cumulative` = session totals. */
@@ -13,7 +25,6 @@ export interface TokenOptions {
 }
 
 export interface CostOptions {
-  show: boolean;
   /** `{amount}` is replaced with the number, e.g. `"${amount}"` or `"{amount} USD"`. */
   format: string;
 }
@@ -97,7 +108,7 @@ export const DEFAULT_OPTIONS: RichOptions = {
     inputPrefix: "\u2193",
     outputPrefix: "\u2191",
   },
-  cost: { show: false, format: "${amount}" },
+  cost: { format: "${amount}" },
   status: {
     labels: { thinking: "Thinking", working: "Working", prompting: "Prompting", idle: "Idle" },
   },
@@ -166,7 +177,6 @@ export function resolveOptions(raw: unknown): RichOptions {
       outputPrefix: str(tokens.outputPrefix, DEFAULT_OPTIONS.tokens.outputPrefix),
     },
     cost: {
-      show: bool(cost.show, DEFAULT_OPTIONS.cost.show),
       format: str(cost.format, DEFAULT_OPTIONS.cost.format),
     },
     status: {
