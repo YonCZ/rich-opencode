@@ -1,170 +1,211 @@
-# opencode-rpc
+# Rich Opencode
 
-Discord Rich Presence for [OpenCode](https://opencode.ai). works on both opencode 1.x.x and 2.x.x.
+A **highly configurable Discord Rich Presence plugin for [OpenCode](https://opencode.ai)**.
 
-> **This is a local fork ("RichOpencode").** Changes vs. stock:
-> - details line shows the model (`deepseek-v4.1-flash`); the state line shows context tokens + status (`↓ 16.3k | ↑ 500 · Working`)
-> - tokens are the **latest model call's context usage** (input+cache / output+reasoning), matching OpenCode's sidebar "Context" number — not cumulative session totals
-> - the elapsed timer starts with the first activity and keeps counting through idle; a continuous 30+ minute idle stretch starts a new timer (no more 100+ hour timers from old sessions)
-> - the card follows the most recently active **root** session; freshly opened empty sessions and sub-agent sessions never take it over
-> - state line cycles between `Thinking`, `Working`, `Prompting`, and `Idle`
-> - `Thinking` = model reasoning events; `Working` = tool calls, text streaming, execution
-> - `Prompting` = no agent activity, keyboard/mouse input within 60s, **and** a supported terminal/editor app is frontmost (OpenCode does not broadcast prompt typing; this is the closest proxy)
-> - `Idle` = nothing running, no recent input, or the terminal is not frontmost
-> - only the opencode logo is shown (no provider icon), no elapsed timer, cost off by default
-> - one leader instance owns the Discord connection (file lock at `~/.local/share/opencode/opencode-rpc.lock`); the others stay dormant
-> - connection retries with backoff instead of dying on the 10s handshake timeout
-> - every flush/status is appended to `~/.local/share/opencode/opencode-rpc-debug.log` for diagnosis
->
-> Run `npm run preview [status]` to flash a sample card in Discord for a few seconds,
-> or `npm run diagnose` to open a single raw RPC connection for 10 minutes.
+Show your model, context usage, activity status and a play-session timer on your Discord profile — arranged exactly how you want them.
 
-<p align="center">
-  <img width="458" height="163" src="https://github.com/user-attachments/assets/222a7434-38b3-44ca-9292-abde7b7863c5" />
-</p>
-
-## install
-
-### OpenCode 2.x.x
-
-```bash
-opencode plugin add opencode-rpc
+```
+Playing opencode
+deepseek-v4.1-flash
+↓ 298.8k | ↑ 398 · Working
+01:23:45 elapsed
 ```
 
-or add it to the `plugins` array in `opencode.json`:
+## Features
+
+- **Fully configurable layout** — choose which fields go on line 1 and line 2, in any order, with any separator
+- **Fields**: model, token usage, cost, activity status, project name, agent, and custom literal text
+- **Two token modes** — `context` (latest model call, matches OpenCode's sidebar "Context" number) or `cumulative` (session totals)
+- **Activity status** — `Thinking` (model reasoning), `Working` (tools, streaming, execution), `Prompting` (you're typing), `Idle`
+- **Play-session timer** — counts continuously through idle, starts a new session after a long break
+- **Custom Discord app** — optional `clientId` for your own app name, logo and assets
+- **One Discord connection per machine** — a leader lock prevents the duplicate-connection storms that happen when OpenCode loads a plugin per project location
+- **Resilient** — retries the Discord handshake with backoff, reconnects after Discord restarts
+- **Privacy-conscious** — the project name is never shown unless you add the `project` field
+
+## Requirements
+
+- **OpenCode 2.x** (OpenCode 1.18.29+ is also supported)
+- **Discord desktop app** running on the same machine (browser Discord does not expose the IPC socket)
+- In Discord: **User Settings → Activity Privacy → "Display current activity as a status message"** must be ON
+- The `Prompting` heuristics use macOS system APIs (`ioreg`, `lsappinfo`); on other platforms the plugin still works, but `Prompting` stays off and `Idle` is used instead
+
+## Install
+
+Rich Opencode is installed from a local checkout (npm publishing planned):
+
+```bash
+git clone https://github.com/YonCZ/rich-opencode.git
+cd rich-opencode
+npm install
+npm run build
+```
+
+Then register it in `~/.config/opencode/opencode.json` (or a project `opencode.json`):
 
 ```jsonc
 {
-  "plugins": ["opencode-rpc"]
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    {
+      "package": "/absolute/path/to/rich-opencode",
+      "options": {}
+    }
+  ]
 }
 ```
 
-### OpenCode 1.x.x
+Save the config (OpenCode hot-reloads) or run `opencode service restart`.
 
-```bash
-npm install opencode-rpc
-```
+> The `options` block below is optional — every setting has a default.
 
-the install script adds the plugin to your OpenCode config. set `SKIP_OPENCODE_AUTO_CONFIG=1` to skip that and register it yourself:
+## Configuration
 
-```json
+All options live in the `options` object of the plugin entry:
+
+```jsonc
 {
-  "plugin": ["opencode-rpc"]
+  "plugins": [
+    {
+      "package": "/absolute/path/to/rich-opencode",
+      "options": {
+        "details": ["model"],
+        "state": ["tokens", "status"],
+        "separator": " · ",
+        "tokens": { "mode": "context" },
+        "timer": { "enabled": true, "idleResetMinutes": 30 },
+        "debug": false
+      }
+    }
+  ]
 }
 ```
 
-## update
+### Lines and fields
 
-opencode has a terrible caching system for npm plugins, so you'll need to force a refresh if the plugin has been updated:
+`details` is line 1, `state` is line 2. Fields render in order and empty ones are skipped.
 
-```bash
-opencode plugin opencode-rpc@latest --global --force
+| Field | Renders |
+| --- | --- |
+| `model` | the active model id, e.g. `deepseek-v4.1-flash` |
+| `tokens` | token usage, e.g. `↓ 298.8k \| ↑ 398` |
+| `cost` | cumulative session cost, e.g. `$1.42` |
+| `status` | `Thinking` / `Working` / `Prompting` / `Idle` |
+| `project` | the project folder name |
+| `agent` | the active agent id |
+| `text:<anything>` | literal text, e.g. `"text:in opencode"` |
+
+### Options reference
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `clientId` | built-in shared app | Discord application id (see [Custom Discord app](#custom-discord-app)) |
+| `details` | `["model"]` | line 1 fields |
+| `state` | `["tokens", "status"]` | line 2 fields |
+| `separator` | `" · "` | joins non-empty fields |
+| `tokens.mode` | `"context"` | `context` = latest model call (matches OpenCode's sidebar), `cumulative` = session totals |
+| `tokens.showInput` | `true` | show the input/context half |
+| `tokens.showOutput` | `true` | show the output half |
+| `tokens.inputPrefix` | `"↓"` | prefix for input tokens |
+| `tokens.outputPrefix` | `"↑"` | prefix for output tokens |
+| `cost.show` | `false` | include cost in the `cost` field |
+| `cost.format` | `"${amount}"` | `{amount}` is replaced with the number |
+| `status.labels.*` | `Thinking` / `Working` / `Prompting` / `Idle` | rename or translate the states |
+| `prompting.idleSeconds` | `60` | input within this window counts as prompting |
+| `prompting.frontmostOnly` | `true` | require one of `prompting.apps` to be frontmost (macOS) |
+| `prompting.apps` | Terminal, iTerm2, Ghostty, Warp, VS Code, Cursor, … | apps that count as "the opencode window" |
+| `timer.enabled` | `true` | show the Discord elapsed timer |
+| `timer.idleResetMinutes` | `30` | a continuous idle stretch this long starts a new play session |
+| `largeImage.key` | `"logo"` | Discord asset key for the large image |
+| `largeImage.text` | `"OpenCode"` | hover text for the large image |
+| `smallImage.enabled` | `false` | show a small provider icon |
+| `smallImage.providerIcons` | `{}` | override icon URLs per provider id |
+| `debug` | `false` | log lifecycle and flush details to `~/.local/share/opencode/rich-opencode-debug.log` |
+| `leaderLock` | `true` | let one plugin instance own the Discord connection |
+
+### Examples
+
+**Everything on two lines**
+
+```jsonc
+"options": {
+  "details": ["model", "project"],
+  "state": ["tokens", "status"]
+}
 ```
 
-## configuration
+**Literal text + total usage**
 
-```json
-{
-  "plugin": ["opencode-rpc"],
-  "plugin_config": {
-    "opencode-rpc": {
-      "clientId": "1234567890",
-      "showProject": true,
-      "showTokens": true,
-      "showCost": true
-      ...
+```jsonc
+"options": {
+  "details": ["text:Rich Opencode", "project"],
+  "state": ["tokens", "cost", "status"],
+  "tokens": { "mode": "cumulative" },
+  "cost": { "show": true }
+}
+```
+
+**Localized labels and a custom separator**
+
+```jsonc
+"options": {
+  "separator": " — ",
+  "status": {
+    "labels": {
+      "thinking": "Přemýšlí",
+      "working": "Pracuje",
+      "prompting": "Píše",
+      "idle": "Nečinný"
     }
   }
 }
 ```
 
-### options
+## How it works
 
-| option | default | meaning |
-| --- | --- | --- |
-| `clientId` | built-in | Your own Discord application client ID |
-| `showProject` | `true` | Show the project folder name |
-| `showTokens` | `true` | Show input/output token counts |
-| `showCost` | `true` | Show session cost |
-| `customText` | `Working on` | Text before the project name |
-| `hideProjectText` | `something...` | Text used when the project name is hidden |
-| `providerIcons` | `{}` | Override or add provider icons, keyed by provider ID |
+Rich Opencode runs as an OpenCode server plugin and subscribes to the V2 event stream:
 
-Put a `.hiderpc` file in a project to force `showProject = false` for that project only.
+| Status | Source |
+| --- | --- |
+| `Thinking` | `session.reasoning.started` → `session.reasoning.ended` |
+| `Working` | `session.execution.started`, tool calls, text streaming, step starts |
+| `Prompting` | no agent activity, recent keyboard/mouse input, and (optionally) the terminal is frontmost |
+| `Idle` | nothing running and no recent input |
 
-### debugging
+Token numbers come from `session.step.ended` — the latest model call — so the card matches the "Context" number in OpenCode's sidebar instead of inflating to the whole session's cumulative usage.
 
-set `OPENCODE_RPC_DEBUG=1` to append state changes to `~/.local/share/opencode/opencode-rpc-debug.log`.
+The elapsed timer starts with the first activity and keeps counting through idle. A continuous idle stretch of `timer.idleResetMinutes` starts a new play session, so an old session opened days later doesn't show a 100+ hour timer.
 
-## updating
+OpenCode loads one plugin instance per project location. `leaderLock` lets exactly one of them own the Discord IPC connection (lock file: `~/.local/share/opencode/rich-opencode.lock`), and the leader retries with backoff if the 10s Discord handshake times out.
+
+### Prompting caveat
+
+OpenCode does not broadcast prompt typing — the TUI keeps your prompt draft local (`tui.prompt.append` is an inbound command, not a typing signal). `Prompting` therefore approximates "you're typing" with macOS system input activity plus the frontmost app check. On non-macOS platforms it stays off.
+
+## Custom Discord app
+
+For your own name, logo and assets:
+
+1. Create an application at [discord.com/developers/applications](https://discord.com/developers/applications) — the app name becomes the "Playing …" headline
+2. Copy the **Application ID** → `clientId`
+3. Under **Rich Presence → Art Assets**, upload your large image with the asset key used by `largeImage.key` (default `logo`)
+4. Optionally upload provider icons and map them via `smallImage.providerIcons`
+
+## Development
 
 ```bash
-opencode plugin update opencode-rpc
+npm run build       # tsc → dist/
+npm run typecheck   # type check only
+npm run preview     # flash a sample card in Discord for ~5s (optionally pass a status: preview thinking)
+npm run diagnose    # open a single raw RPC connection for 10 minutes
 ```
 
-opencode caches plugin packages, so a plain reinstall may keep serving the old build. clear the cached copy and restart if a new version does not appear:
+Set `"debug": true` in the options to get a log at `~/.local/share/opencode/rich-opencode-debug.log` (rotated at 5 MB).
 
-linux/macOS:
-```bash
-rm -rf "$HOME/.cache/opencode/npm/opencode-rpc@latest"
-```
-windows (PowerShell):
-```powershell
-Remove-Item -Recurse -Force "$HOME\.cache\opencode\npm\opencode-rpc@latest"
-```
+## License
 
-## built-in provider icons
+MIT. See [LICENSE](LICENSE).
 
-| provider ID(s) | |
-|---|---|
-| `openai` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/openai.png" width="24" /> |
-| `anthropic` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/anthropic.png" width="24" /> |
-| `google`, `google-gemini`, `gemini`, `google-vertex` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/google-gemini.png" width="24" /> |
-| `groq` | <img src="https://www.google.com/s2/favicons?domain=groq.com&sz=32" width="24" /> |
-| `together`, `together-color`, `togetherai` | <img src="https://www.google.com/s2/favicons?domain=together.ai&sz=32" width="24" /> |
-| `cohere` | <img src="https://www.google.com/s2/favicons?domain=cohere.com&sz=32" width="24" /> |
-| `mistral` | <img src="https://www.google.com/s2/favicons?domain=mistral.ai&sz=32" width="24" /> |
-| `azure`, `azure-cognitive-services` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/azure.png" width="24" /> |
-| `aws`, `amazon`, `amazon-bedrock` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/amazon-web-services.png" width="24" /> |
-| `xai` | <img src="https://www.google.com/s2/favicons?domain=x.ai&sz=32" width="24" /> |
-| `deepseek` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/deepseek.png" width="24" /> |
-| `perplexity` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/perplexity.png" width="24" /> |
-| `copilot`, `github-copilot`, `github` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/github-copilot.png" width="24" /> |
-| `gitlab` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/gitlab.png" width="24" /> |
-| `huggingface` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/hugging-face.png" width="24" /> |
-| `cloudflare`, `cloudflare-ai-gateway`, `cloudflare-workers-ai` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/cloudflare.png" width="24" /> |
-| `nvidia` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/nvidia.png" width="24" /> |
-| `databricks` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/databricks.png" width="24" /> |
-| `vercel` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/vercel.png" width="24" /> |
-| `vultr` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/vultr.png" width="24" /> |
-| `zenmux` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/zenmux.png" width="24" /> |
-| `ovhcloud` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/ovh.png" width="24" /> |
-| `ollama`, `ollama-cloud` | <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/ollama.png" width="24" /> |
-| `openrouter` | <img src="https://www.google.com/s2/favicons?domain=openrouter.ai&sz=32" width="24" /> |
-| `deepinfra` | <img src="https://www.google.com/s2/favicons?domain=deepinfra.com&sz=32" width="24" /> |
-| `cerebras` | <img src="https://www.google.com/s2/favicons?domain=cerebras.ai&sz=32" width="24" /> |
-| `digitalocean` | <img src="https://www.google.com/s2/favicons?domain=digitalocean.com&sz=32" width="24" /> |
-| `moonshotai` | <img src="https://www.google.com/s2/favicons?domain=moonshot.ai&sz=32" width="24" /> |
-| `venice` | <img src="https://www.google.com/s2/favicons?domain=venice.ai&sz=32" width="24" /> |
-| `helicone` | <img src="https://www.google.com/s2/favicons?domain=helicone.ai&sz=32" width="24" /> |
-| `nebius` | <img src="https://www.google.com/s2/favicons?domain=nebius.com&sz=32" width="24" /> |
-| `minimax` | <img src="https://www.google.com/s2/favicons?domain=minimax.io&sz=32" width="24" /> |
-| `scaleway` | <img src="https://www.google.com/s2/favicons?domain=scaleway.com&sz=32" width="24" /> |
-| `zai` | <img src="https://www.google.com/s2/favicons?domain=z.ai&sz=32" width="24" /> |
-| `io-net` | <img src="https://www.google.com/s2/favicons?domain=io.net&sz=32" width="24" /> |
-| `stackit` | <img src="https://www.google.com/s2/favicons?domain=stackit.de&sz=32" width="24" /> |
-| `baseten` | <img src="https://www.google.com/s2/favicons?domain=baseten.co&sz=32" width="24" /> |
-| `fireworks-ai` | <img src="https://www.google.com/s2/favicons?domain=www.fireworks.ai&sz=32" width="24" /> |
-| `sap-ai-core` | <img src="https://www.google.com/s2/favicons?domain=sap.com&sz=32" width="24" /> |
-| `302ai` | <img src="https://www.google.com/s2/favicons?domain=302.ai&sz=32" width="24" /> |
-| `cortecs` | <img src="https://www.google.com/s2/favicons?domain=cortecs.ai&sz=32" width="24" /> |
-| `llmgateway` | <img src="https://www.google.com/s2/favicons?domain=llmgateway.io&sz=32" width="24" /> |
-| `frogbot` | <img src="https://www.google.com/s2/favicons?domain=frogbot.ai&sz=32" width="24" /> |
-| `opencode-go`, `opencode-zen` | uses the OpenCode app icon |
+## Credits
 
-any other provider falls back to the OpenCode icon, or to whatever you set in `providerIcons`.
-
-## uhh
-
-everything was vibecoded with opencode go's kimi k2.6 :) but if it works it works
-upd: v2 port was vibecoded with opencode go's deepseek v4.1 flash! how the time flies
+Rich Opencode is a heavily modified fork of [butterbrodskiy/opencode-rpc](https://github.com/butterbrodskiy/opencode-rpc) (MIT), which this project would not exist without. Thanks also to the OpenCode team for the plugin event API.

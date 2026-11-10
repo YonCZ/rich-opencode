@@ -2,7 +2,7 @@ import type { Plugin } from "@opencode-ai/plugin";
 import { createV1Hooks } from "./v1.js";
 import { createV2Plugin, pluginId } from "./v2.js";
 
-export type { DiscordRpcOptions } from "./presence.js";
+export type { RichOptions } from "./options.js";
 
 const v2 = createV2Plugin();
 

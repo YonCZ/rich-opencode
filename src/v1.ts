@@ -1,6 +1,7 @@
 import type { Config, Plugin } from "@opencode-ai/plugin";
 import type { AssistantMessage, Event, Session } from "@opencode-ai/sdk";
-import { Presence, debugLog, type DiscordRpcOptions, type SessionUsage } from "./presence.js";
+import { resolveOptions, type RichOptions } from "./options.js";
+import { Presence, debugLog, setDebugLogging, type SessionUsage } from "./presence.js";
 
 type V1Hooks = Awaited<ReturnType<Plugin>>;
 
@@ -15,8 +16,10 @@ interface V1Input {
   worktree?: string;
 }
 
-export async function createV1Hooks(input: V1Input, rawOptions?: DiscordRpcOptions): Promise<V1Hooks> {
-  const presence = new Presence({ ...(rawOptions ?? {}) }, input.worktree || input.directory || "");
+export async function createV1Hooks(input: V1Input, rawOptions?: RichOptions | Record<string, unknown>): Promise<V1Hooks> {
+  const options = resolveOptions(rawOptions);
+  setDebugLogging(options.debug);
+  const presence = new Presence(options, input.worktree || input.directory || "");
   const messages = new Map<string, SessionUsage>();
 
   async function rememberParent(sessionID: string): Promise<void> {
@@ -50,9 +53,9 @@ export async function createV1Hooks(input: V1Input, rawOptions?: DiscordRpcOptio
 
   return {
     config: async (cfg: Config) => {
-      const pluginConfig = (cfg as Record<string, unknown> & { plugin_config?: Record<string, DiscordRpcOptions> })
-        .plugin_config?.["opencode-rpc"];
-      if (pluginConfig) presence.setOptions(pluginConfig);
+      const pluginConfig = (cfg as Record<string, unknown> & { plugin_config?: Record<string, unknown> })
+        .plugin_config?.["rich-opencode"];
+      if (pluginConfig) presence.setOptions(resolveOptions(pluginConfig));
 
       setTimeout(() => {
         presence.start();
@@ -81,6 +84,7 @@ export async function createV1Hooks(input: V1Input, rawOptions?: DiscordRpcOptio
 
         if (message.role === "user") {
           presence.setCurrentSession(message.sessionID as string);
+          presence.setStatus("working");
           const model = message.model as { providerID: string; modelID: string } | undefined;
           if (model) presence.setModel({ providerID: model.providerID, modelID: model.modelID });
           return;
@@ -96,6 +100,15 @@ export async function createV1Hooks(input: V1Input, rawOptions?: DiscordRpcOptio
         presence.setCurrentSession(assistant.sessionID);
         presence.setModel({ providerID: assistant.providerID, modelID: assistant.modelID });
         if (assistant.path?.cwd) presence.setProjectDir(assistant.path.cwd);
+        presence.setAgent(assistant.sessionID, assistant.mode);
+
+        const cache = assistant.tokens?.cache;
+        presence.setContextUsage(
+          assistant.sessionID,
+          (assistant.tokens?.input ?? 0) + (cache?.read ?? 0) + (cache?.write ?? 0),
+          (assistant.tokens?.output ?? 0) + (assistant.tokens?.reasoning ?? 0),
+        );
+        presence.setStatus(assistant.time?.completed ? "idle" : "working");
 
         const usage: SessionUsage = {
           tokensInput: assistant.tokens?.input ?? 0,

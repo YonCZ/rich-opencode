@@ -1,17 +1,10 @@
 {
-  "name": "opencode-rpc",
-  "version": "2.0.0",
+  "name": "rich-opencode",
+  "version": "1.0.0",
+  "description": "Highly configurable Discord Rich Presence plugin for OpenCode — your model, context usage, activity status and a play-session timer, arranged how you want.",
   "type": "module",
   "license": "MIT",
-  "author": "butterbrodskiy",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/butterbrodskiy/opencode-rpc.git"
-  },
-  "homepage": "https://github.com/butterbrodskiy/opencode-rpc#readme",
-  "bugs": {
-    "url": "https://github.com/butterbrodskiy/opencode-rpc/issues"
-  },
+  "author": "YonCZ",
   "keywords": [
     "opencode",
     "opencode-plugin",
@@ -21,6 +14,14 @@
     "presence",
     "plugin"
   ],
+  "homepage": "https://github.com/YonCZ/rich-opencode",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YonCZ/rich-opencode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YonCZ/rich-opencode/issues"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -41,7 +42,8 @@
   ],
   "files": [
     "dist",
-    "scripts"
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
@@ -50,16 +52,14 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "prepack": "npm run build",
-    "postinstall": "node scripts/postinstall.mjs",
     "preview": "node preview.mjs",
     "diagnose": "node diagnose.mjs"
   },
   "dependencies": {
-    "@xhayper/discord-rpc": "^1.3.1"
+    "@xhayper/discord-rpc": "^1.3.4"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.32",
-    "@opencode-ai/sdk": "^1.18.32",
     "@opencode/plugin": "^2.0.14",
     "@types/node": "^25.8.0",
     "typescript": "^5.8.0"
@@ -75,6 +75,5 @@
     "@opencode/plugin": {
       "optional": true
     }
-  },
-  "description": "RichOpencode fork: sarcastic random app names, no provider icon, model id in the state line, cost off by default"
+  }
 }
