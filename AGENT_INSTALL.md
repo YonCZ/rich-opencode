@@ -167,9 +167,19 @@ You cannot enable this setting for the user. Tell them:
 3. Open Activity Privacy.
 4. Turn on "Display current activity as a status message".
 
-## 6. Restart the TUI
+## 6. Restart the service and the TUI
 
-Tell the user to quit and reopen `opencode`. The plugin includes a TUI part that reports the open chat, and the TUI loads it at startup. Their sessions and the background service stay intact.
+The service caches the plugin feature list from the first load. A fresh start advertises the TUI part. Run:
+
+```bash
+opencode service restart
+sleep 5
+opencode api get /api/plugin 2>/dev/null | grep -o '"id":"rich-opencode","source":{[^}]*},"features":{[^}]*}'
+```
+
+The features should include `"tui":true`.
+
+Then tell the user to quit and reopen `opencode`. The plugin includes a TUI part that reports the open chat, and the TUI loads it at startup. Their sessions and the background service stay intact.
 
 ## Troubleshooting
 

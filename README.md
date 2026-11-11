@@ -73,9 +73,13 @@ Register the plugin in `~/.config/opencode/opencode.json`. Use the absolute path
 }
 ```
 
-Save the file. OpenCode reloads the config. If the plugin does not appear, run `opencode service restart`.
+Save the file. OpenCode reloads the config. Then restart the background service and your TUI:
 
-Restart your OpenCode TUI once after installing. The plugin includes a TUI part that reports the open chat, and the TUI loads it at startup.
+```bash
+opencode service restart
+```
+
+Quit and reopen `opencode` after the restart. The plugin includes a TUI part that reports the open chat. The service advertises that part only after a fresh start, and the TUI loads it at startup. Your sessions stay intact.
 
 The `options` object is optional. Every setting has a default.
 
