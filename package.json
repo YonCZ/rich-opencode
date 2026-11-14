@@ -1,7 +1,7 @@
 {
   "name": "rich-opencode",
   "version": "1.2.2",
-  "description": "Highly configurable Discord Rich Presence plugin for OpenCode — your model, context usage, activity status and a play-session timer, arranged how you want.",
+  "description": "Discord Rich Presence plugin for OpenCode. Shows your model, context usage, activity status, and play-session timer.",
   "type": "module",
   "license": "MIT",
   "author": "YonCZ",

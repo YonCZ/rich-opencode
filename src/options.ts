@@ -58,7 +58,7 @@ export interface SmallImageOptions {
 }
 
 export interface RichOptions {
-  /** Discord application id. Omit to use the built-in shared OpenCode app. */
+  /** Discord Application ID. Omit to use the built-in shared OpenCode app. */
   clientId?: string;
   /** Line 1 fields, rendered in order. */
   details: LineField[];
@@ -74,7 +74,7 @@ export interface RichOptions {
   smallImage: SmallImageOptions;
   /** Append lifecycle/flush details to `~/.local/share/opencode/rich-opencode-debug.log`. */
   debug: boolean;
-  /** One plugin instance owns the Discord connection (recommended). */
+  /** One plugin instance uses the Discord connection (recommended). */
   leaderLock: boolean;
 }
 

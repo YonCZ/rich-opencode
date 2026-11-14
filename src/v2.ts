@@ -16,7 +16,7 @@ const STATUS_POLL_MS = 5_000;
 
 /**
  * The server loads one plugin instance per location, but Discord only needs one
- * connection. Whichever instance wins this lock owns the RPC client.
+ * connection. Whichever instance wins this lock uses the RPC client.
  */
 const LOCK_PATH = join(homedir(), ".local", "share", "opencode", "rich-opencode.lock");
 const LOCK_STALE_MS = 15_000;
@@ -328,7 +328,7 @@ export function createV2Plugin() {
               }
 
               case "session.viewed": {
-                // A TUI viewed a session (user switched to it) — that is a focus signal.
+                // A TUI viewed a session, so the user switched to it. That is a focus signal.
                 setFocus(event.data.sessionID);
                 void inspect(event.data.sessionID);
                 break;
@@ -364,7 +364,7 @@ export function createV2Plugin() {
               }
 
               case "session.inbox.enqueued": {
-                // A real user prompt landed in this session — the user is there.
+                // A real user prompt landed in this session, so the user is there.
                 if (event.data.item.type === "user") setFocus(event.data.sessionID);
                 break;
               }

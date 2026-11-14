@@ -17,34 +17,25 @@ Available fields:
 
 | Field | Example | Notes |
 | --- | --- | --- |
-| `model` | `deepseek-v4.1-flash` | model id |
+| `model` | `deepseek-v4.1-flash` | model ID |
 | `modelName` | `DeepSeek V4.1 Flash` | display name from the model catalog |
-| `provider` | `einfra` | provider id |
+| `provider` | `einfra` | provider ID |
 | `variant` | `high` | model variant |
 | `tokens` | `↓ 298.8k \| ↑ 398` | context usage or session totals |
 | `tokenPercent` | `34%` | context used against the model limit |
 | `cost` | `$0.52` | cumulative session cost |
 | `status` | `Working` | Thinking, Working, Prompting or Idle |
 | `project` | `Programming` | project folder name |
-| `agent` | `build` | active agent id |
+| `agent` | `build` | active agent ID |
 | `title` | `Discord Rich Presence` | session title, visible on your profile |
 | `text:<anything>` | `in opencode` | literal text |
-
-Other features:
-
-- two token modes, `context` for the latest model call and `cumulative` for session totals
-- a play-session timer that counts idle time and resets after a long break
-- the card follows the chat open in your TUI, not the chat that ran last
-- optional custom Discord application, logo and provider icons
-- one Discord connection per machine, with reconnect and retry
-- the project name and session title are hidden unless you add those fields
 
 ## Requirements
 
 - OpenCode 2.x. OpenCode 1.18.29 and newer also work.
 - Discord desktop app running on the same machine. Discord in a browser cannot reach the local IPC socket.
 - In Discord, open User Settings, then Activity Privacy, and turn on "Display current activity as a status message".
-- The Prompting state uses macOS system APIs. On other platforms the plugin works, but Prompting stays off and the card shows Idle instead.
+- Prompting requires macOS.
 
 ## Install with an AI agent
 
@@ -79,7 +70,7 @@ Save the file. OpenCode reloads the config. Then restart the background service 
 opencode service restart
 ```
 
-Quit and reopen `opencode` after the restart. The plugin includes a TUI part that reports the open chat. The service advertises that part only after a fresh start, and the TUI loads it at startup. Your sessions stay intact.
+Quit and reopen `opencode` after the restart. The service advertises the plugin's TUI part only after a fresh start, and the TUI loads it at startup. Your sessions stay intact.
 
 The `options` object is optional. Every setting has a default.
 
@@ -111,7 +102,7 @@ All settings go in the `options` object of the plugin entry.
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `clientId` | built-in shared app | Discord application id |
+| `clientId` | built-in shared app | Discord Application ID |
 | `details` | `["model"]` | fields on the first line |
 | `state` | `["tokens", "status"]` | fields on the second line |
 | `separator` | `" · "` | joins non-empty fields |
@@ -130,20 +121,11 @@ All settings go in the `options` object of the plugin entry.
 | `largeImage.key` | `"logo"` | asset key for the large image |
 | `largeImage.text` | `"OpenCode"` | hover text for the large image |
 | `smallImage.enabled` | `false` | show a provider icon |
-| `smallImage.providerIcons` | `{}` | icon URLs by provider id |
+| `smallImage.providerIcons` | `{}` | icon URLs by provider ID |
 | `debug` | `false` | write a log to `~/.local/share/opencode/rich-opencode-debug.log` |
-| `leaderLock` | `true` | let one plugin instance own the Discord connection |
+| `leaderLock` | `true` | let one plugin instance use the Discord connection |
 
 ### Examples
-
-Everything on two lines:
-
-```jsonc
-"options": {
-  "details": ["model", "project"],
-  "state": ["tokens", "status"]
-}
-```
 
 Show the price:
 
@@ -182,13 +164,13 @@ The plugin subscribes to the OpenCode V2 event stream.
 | Prompting | no agent activity, recent keyboard or mouse input, and the terminal is frontmost |
 | Idle | nothing running and no recent input |
 
-Token numbers come from `session.step.ended`, so the card shows the latest model call. The value matches the Context number in OpenCode's sidebar. The `cumulative` token mode uses the session totals instead, which is what the old RPC plugins showed.
+Token numbers come from `session.step.ended`, so the card shows the latest model call. The value matches the Context number in OpenCode's sidebar. The `cumulative` token mode uses the session totals instead.
 
 The timer starts with the first activity and keeps counting through idle. A continuous idle stretch of `timer.idleResetMinutes` starts a new session timer, so opening an old chat does not show a 100 hour timer.
 
 ### Which chat is shown
 
-The OpenCode server does not report focus changes. The plugin's TUI part writes the open chat to `~/.local/share/opencode/rich-opencode-focus.json` on route changes. The server follows that file.
+The OpenCode server does not report focus changes. The plugin's TUI part writes the open chat to `~/.local/share/opencode/rich-opencode-focus.json` on route changes. The server reads that file.
 
 - switching chats or tabs updates the card immediately
 - a background chat that runs or finishes does not take over the card
@@ -201,7 +183,7 @@ OpenCode does not send prompt typing to plugins. The TUI keeps the draft local, 
 
 ### Multiple instances
 
-OpenCode loads one plugin instance per project location. The `leaderLock` option lets one instance own the Discord connection, with a lock file at `~/.local/share/opencode/rich-opencode.lock`. The leader retries the Discord handshake with backoff if it times out.
+OpenCode loads one plugin instance per project location. The `leaderLock` option lets one instance use the Discord connection, with a lock file at `~/.local/share/opencode/rich-opencode.lock`. The leader retries the Discord handshake with backoff if it times out.
 
 ## Custom Discord app
 
@@ -227,4 +209,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Credits
 
-Rich Opencode is a modified fork of [butterbrodskiy/opencode-rpc](https://github.com/butterbrodskiy/opencode-rpc), released under MIT. Thanks to the OpenCode team for the plugin event API.
+Rich Opencode is a fork of [butterbrodskiy/opencode-rpc](https://github.com/butterbrodskiy/opencode-rpc), released under MIT. Thanks to the OpenCode team for the plugin event API.
