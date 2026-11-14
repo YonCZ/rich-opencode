@@ -14,13 +14,13 @@
     "presence",
     "plugin"
   ],
-  "homepage": "https://github.com/YonCZ/rich-opencode",
+  "homepage": "https://github.com/YonCZ/OpenCode-Presence",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YonCZ/rich-opencode.git"
+    "url": "git+https://github.com/YonCZ/OpenCode-Presence.git"
   },
   "bugs": {
-    "url": "https://github.com/YonCZ/rich-opencode/issues"
+    "url": "https://github.com/YonCZ/OpenCode-Presence/issues"
   },
   "engines": {
     "node": ">=20"

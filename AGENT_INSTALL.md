@@ -43,7 +43,7 @@ DIR="${XDG_DATA_HOME:-$HOME/.local/share}/rich-opencode"
 if [ -d "$DIR/.git" ]; then
   git -C "$DIR" pull --ff-only
 else
-  git clone https://github.com/YonCZ/rich-opencode.git "$DIR"
+  git clone https://github.com/YonCZ/OpenCode-Presence.git "$DIR"
 fi
 
 cd "$DIR"

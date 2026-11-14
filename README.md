@@ -44,7 +44,7 @@ Point your agent at [AGENT_INSTALL.md](AGENT_INSTALL.md). It contains the comman
 ## Install manually
 
 ```bash
-git clone https://github.com/YonCZ/rich-opencode.git
+git clone https://github.com/YonCZ/OpenCode-Presence.git
 cd rich-opencode
 npm install
 npm run build
